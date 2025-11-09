@@ -85,20 +85,32 @@ export const GEOIP_CONFIG = {
 };
 
 // ============================================
-// Telegram通知配置
+// Telegram 通知配置
 // ============================================
 export const TELEGRAM_CONFIG = {
-  // 是否启用激活通知
-  NOTIFY_ON_ACTIVATION: true,
-  
-  // 是否启用反共享检测通知
-  NOTIFY_ON_ANTI_SHARE_TRIGGER: true,
-  
-  // 是否启用过期通知
-  NOTIFY_ON_EXPIRY: false,
-  
-  // 是否启用设备绑定通知
-  NOTIFY_ON_DEVICE_BIND: true
+  NOTIFY_ON_ACTIVATION: true,      // 是否发送激活通知
+  NOTIFY_ON_DEVICE_LIMIT: true,    // 是否发送设备数超限通知
+  NOTIFY_ON_CITY_MISMATCH: true,   // 是否发送城市不匹配通知
+  NOTIFY_ON_RATE_LIMIT: true       // 是否发送访问次数超限通知
+};
+
+// ============================================
+// Bot 检测配置（防止链接预览导致意外激活）
+// ============================================
+export const BOT_DETECTION_CONFIG = {
+  ENABLED: true,                   // 是否启用Bot检测
+  // Bot User-Agent关键词（忽略大小写）
+  BOT_KEYWORDS: [
+    'bot',                          // TelegramBot, DiscordBot等
+    'crawler',                      // 爬虫
+    'spider',                       // 搜索引擎爬虫
+    'preview',                      // 链接预览
+    'fetch',                        // 预取
+    'headless',                     // 无头浏览器
+    'phantomjs',                    // PhantomJS
+    'curl',                         // Curl（可选，根据需要开启）
+    'wget'                          // Wget（可选，根据需要开启）
+  ]
 };
 
 // ============================================
@@ -138,7 +150,8 @@ export function getConfig() {
       cleanup: CLEANUP_CONFIG,
       city: CITY_CONFIG,
       geoip: GEOIP_CONFIG,
-      telegram: TELEGRAM_CONFIG
+      telegram: TELEGRAM_CONFIG,
+      botDetection: BOT_DETECTION_CONFIG
     };
   }
   
@@ -148,7 +161,8 @@ export function getConfig() {
     cleanup: CLEANUP_CONFIG,
     city: CITY_CONFIG,
     geoip: GEOIP_CONFIG,
-    telegram: TELEGRAM_CONFIG
+    telegram: TELEGRAM_CONFIG,
+    botDetection: BOT_DETECTION_CONFIG
   };
 }
 

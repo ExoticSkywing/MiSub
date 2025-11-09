@@ -1697,6 +1697,24 @@ async function generateCombinedNodeList(context, config, userAgent, misubs, prep
 async function handleUserSubscription(userToken, profileId, profileToken, request, env, config) {
     const asyncConfig = getConfig();
     
+    // 0. 🔒 优先检测Bot请求（保护节点隐私）
+    const userAgent = request.headers.get('User-Agent') || 'Unknown';
+    let isBotRequest = false;
+    if (asyncConfig.botDetection.ENABLED) {
+        const botKeywords = asyncConfig.botDetection.BOT_KEYWORDS.join('|');
+        const botPattern = new RegExp(botKeywords, 'i');
+        isBotRequest = botPattern.test(userAgent);
+    }
+    
+    if (isBotRequest) {
+        // 🔒 拒绝所有Bot访问，防止节点信息泄露
+        console.log(`🤖 Blocked bot/crawler request from: ${userAgent}`);
+        return new Response('Access Denied: Bot requests are not allowed', { 
+            status: 403,
+            headers: { 'Content-Type': 'text/plain' }
+        });
+    }
+    
     // 1. 验证profileToken
     if (profileToken !== config.profileToken) {
         return new Response('Invalid Profile Token', { status: 403 });
@@ -1715,8 +1733,9 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         return new Response('订阅组不匹配', { status: 403 });
     }
     
-    // 4. 首次激活
+    // 4. 首次激活（Bot已在函数开头拦截）
     if (userData.status === 'pending') {
+        // 真实用户请求，执行激活
         userData.status = 'activated';
         userData.activatedAt = Date.now();
         userData.expiresAt = Date.now() + userData.duration;
@@ -1727,7 +1746,6 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         // 发送Telegram通知
         if (asyncConfig.telegram.NOTIFY_ON_ACTIVATION && config.BotToken && config.ChatID) {
             const clientIp = request.headers.get('CF-Connecting-IP') || 'Unknown';
-            const userAgent = request.headers.get('User-Agent') || 'Unknown';
             const activatedTime = new Date(userData.activatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
             const expiresTime = new Date(userData.expiresAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
             
@@ -1800,7 +1818,7 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
     
     // 11. 判断请求格式
     const formatParam = new URL(request.url).searchParams.get('format')?.toLowerCase();
-    const userAgent = request.headers.get('User-Agent') || '';
+    // 使用函数开头定义的userAgent变量
     const preferClash = userAgent.toLowerCase().includes('clash') || formatParam === 'clash';
     
     let finalContent;
