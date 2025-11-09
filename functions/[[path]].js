@@ -1238,10 +1238,11 @@ async function handleApiRequest(request, env) {
                         }), { status: 400, headers: { 'Content-Type': 'application/json' } });
                     }
                     
-                    if (duration < 1 || duration > config.batchGenerate.MAX_DURATION_DAYS) {
+                    // 允许小数有效期（支持测试：1分钟 = 1/1440 ≈ 0.000694）
+                    if (duration <= 0 || duration > config.batchGenerate.MAX_DURATION_DAYS) {
                         return new Response(JSON.stringify({ 
                             success: false, 
-                            error: `有效期必须在 1-${config.batchGenerate.MAX_DURATION_DAYS} 天之间` 
+                            error: `有效期必须大于0且不超过 ${config.batchGenerate.MAX_DURATION_DAYS} 天` 
                         }), { status: 400, headers: { 'Content-Type': 'application/json' } });
                     }
                     
