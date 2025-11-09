@@ -286,6 +286,20 @@ async function sendTgNotification(settings, message) {
 }
 
 /**
+ * 将国家代码转换为国旗 emoji
+ * @param {string} countryCode - 国家代码（如 CN, US, JP）
+ * @returns {string} - 国旗 emoji（如 🇨🇳, 🇺🇸, 🇯🇵）
+ */
+function getCountryEmoji(countryCode) {
+  if (!countryCode || countryCode.length !== 2) return '';
+  const codePoints = countryCode
+    .toUpperCase()
+    .split('')
+    .map(char => 127397 + char.charCodeAt());
+  return String.fromCodePoint(...codePoints);
+}
+
+/**
  * 发送增强版Telegram通知，包含IP地理位置信息
  * @param {Object} settings - 设置对象
  * @param {string} type - 通知类型
@@ -308,23 +322,37 @@ async function sendEnhancedTgNotification(settings, type, request, additionalDat
   if (settings.IPGeoAPIKey && !locationInfo) {
     try {
       const response = await fetch(
-        `https://api.ipgeolocation.io/ipgeo?apiKey=${settings.IPGeoAPIKey}&ip=${clientIp}&lang=zh-CN`,
+        `https://api.ipgeolocation.io/ipgeo?apiKey=${settings.IPGeoAPIKey}&ip=${clientIp}`,
         { signal: AbortSignal.timeout(3000) }
       );
       
       if (response.ok) {
         const data = await response.json();
         if (data.country_name) {
+          // 构建地理信息，添加国旗 emoji
+          const countryEmoji = data.country_emoji || '';
+          const countryName = data.country_name || 'N/A';
+          const city = data.city || 'N/A';
+          const district = data.district || '';
+          
           locationInfo = `
-*国家:* \`${data.country_name || 'N/A'}\`
-*城市:* \`${data.city || 'N/A'}\``;
-          if (data.district) {
+*国家:* ${countryEmoji} \`${countryName}\`
+*城市:* \`${city}\``;
+          
+          // 只有当街道信息存在时才显示
+          if (district) {
             locationInfo += `
-*街道:* \`${data.district}\``;
+*街道:* \`${district}\``;
           }
+          
+          // ISP 和 ASN 信息
+          const isp = data.organization || data.isp || 'N/A';
+          // ASN 可能在不同字段：data.asn, data.connection.asn, 或 data.as
+          const asn = data.asn || data.connection?.asn || data.as || 'N/A';
+          
           locationInfo += `
-*ISP:* \`${data.organization || data.isp || 'N/A'}\`
-*ASN:* \`${data.asn || 'N/A'}\``;
+*ISP:* \`${isp}\`
+*ASN:* \`${asn}\``;
           geoSource = 'ipgeolocation.io';
         }
       }
@@ -344,8 +372,9 @@ async function sendEnhancedTgNotification(settings, type, request, additionalDat
       if (response.ok) {
         const data = await response.json();
         if (data.success !== false && data.country) {
+          const countryEmoji = getCountryEmoji(data.country_code) || '';
           locationInfo = `
-*国家:* \`${data.country || 'N/A'}\`
+*国家:* ${countryEmoji} \`${data.country || 'N/A'}\`
 *城市:* \`${data.city || 'N/A'}\`
 *ISP:* \`${data.isp || 'N/A'}\`
 *ASN:* \`AS${data.asn || 'N/A'}\``;
@@ -368,8 +397,9 @@ async function sendEnhancedTgNotification(settings, type, request, additionalDat
       if (response.ok) {
         const data = await response.json();
         if (data.country_name) {
+          const countryEmoji = data.emoji_flag || getCountryEmoji(data.country_code) || '';
           locationInfo = `
-*国家:* \`${data.country_name || 'N/A'}\`
+*国家:* ${countryEmoji} \`${data.country_name || 'N/A'}\`
 *城市:* \`${data.city || 'N/A'}\`
 *ISP:* \`${data.asn?.name || 'N/A'}\`
 *ASN:* \`${data.asn?.asn || 'N/A'}\``;
@@ -392,8 +422,9 @@ async function sendEnhancedTgNotification(settings, type, request, additionalDat
       if (response.ok) {
         const data = await response.json();
         if (data.status === 'success') {
+          const countryEmoji = getCountryEmoji(data.countryCode) || '';
           locationInfo = `
-*国家:* \`${data.country || 'N/A'}\`
+*国家:* ${countryEmoji} \`${data.country || 'N/A'}\`
 *城市:* \`${data.city || 'N/A'}\`
 *ISP:* \`${data.org || 'N/A'}\`
 *ASN:* \`${data.as || 'N/A'}\``;
@@ -409,8 +440,9 @@ async function sendEnhancedTgNotification(settings, type, request, additionalDat
   if (!locationInfo && request.cf) {
     try {
       const cf = request.cf;
+      const countryEmoji = getCountryEmoji(cf.country) || '';
       locationInfo = `
-*国家:* \`${cf.country || 'N/A'}\`
+*国家:* ${countryEmoji} \`${cf.country || 'N/A'}\`
 *城市:* \`${cf.city || 'N/A'}\` ⚠️
 *ISP:* \`${cf.asOrganization || 'N/A'}\`
 *ASN:* \`AS${cf.asn || 'N/A'}\``;
