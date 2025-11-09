@@ -1842,11 +1842,14 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             contentType = 'text/yaml; charset=utf-8';
             filename = `${profile.name || config.FileName}.yaml`;
         } catch (e) {
-            finalContent = nodeLinks;
+            // Clash格式转换失败，回退到Base64编码的原始格式
+            finalContent = btoa(unescape(encodeURIComponent(nodeLinks)));
+            contentType = 'text/plain; charset=utf-8';
+            filename = `${profile.name || config.FileName}.txt`;
         }
     } else {
-        // 原始格式或Base64
-        finalContent = nodeLinks;
+        // 原始格式 - 需要Base64编码（Shadowrocket等客户端需要）
+        finalContent = btoa(unescape(encodeURIComponent(nodeLinks)));
     }
     
     // 12. 返回订阅内容
