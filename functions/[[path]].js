@@ -1693,16 +1693,119 @@ async function generateCombinedNodeList(context, config, userAgent, misubs, prep
 }
 
 /**
- * 处理用户订阅请求（三段式URL）
+ * 检测是否为浏览器访问
+ * @param {string} userAgent - User-Agent字符串
+ * @returns {boolean} - 是否为浏览器
+ */
+function isBrowserAccess(userAgent) {
+    const browserKeywords = ['mozilla', 'chrome', 'safari', 'firefox', 'edge', 'opera', 'msie', 'trident'];
+    const proxyClientKeywords = ['shadowrocket', 'quantumult', 'surge', 'loon', 'clash', 'stash', 'pharos', 
+                                 'v2rayn', 'v2rayng', 'kitsunebi', 'i2ray', 'pepi', 'potatso', 'netch',
+                                 'qv2ray', 'mellow', 'trojan', 'shadowsocks', 'surfboard'];
+    
+    const lowerUA = userAgent.toLowerCase();
+    return browserKeywords.some(keyword => lowerUA.includes(keyword)) &&
+           !proxyClientKeywords.some(keyword => lowerUA.includes(keyword));
+}
+
+/**
+ * 返回浏览器访问的友好提示页面
+ * @returns {Response} - HTML响应
+ */
+function getBrowserBlockedResponse() {
+    const htmlResponse = `
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>订阅链接</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 500px;
+        }
+        h1 { color: #333; margin-bottom: 1rem; font-size: 1.5rem; }
+        .icon { font-size: 4rem; margin-bottom: 1rem; }
+        p { color: #666; line-height: 1.6; margin: 1rem 0; }
+        .clients {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-top: 1.5rem;
+            text-align: left;
+        }
+        .client {
+            background: #f5f5f5;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            color: #333;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1.5rem;
+            border-left: 4px solid #ffc107;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🔐</div>
+        <h1>此链接仅供代理客户端使用</h1>
+        <p>检测到您正在使用浏览器访问订阅链接。</p>
+        <p><strong>此链接不支持浏览器访问</strong>，请使用以下代理客户端导入：</p>
+        <div class="clients">
+            <div class="client">📱 Shadowrocket</div>
+            <div class="client">⚡ Clash</div>
+            <div class="client">🎯 Quantumult X</div>
+            <div class="client">🌊 Surge</div>
+            <div class="client">🦊 Loon</div>
+            <div class="client">🎪 Stash</div>
+            <div class="client">📡 V2rayN</div>
+            <div class="client">📲 V2rayNG</div>
+        </div>
+        <div class="warning">
+            <strong>⚠️ 安全提示</strong><br>
+            请勿在公共场合或不安全的环境下打开此链接
+        </div>
+    </div>
+</body>
+</html>`;
+    return new Response(htmlResponse, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+    });
+}
+
+/**
+ * 处理用户订阅请求（批量生成的三段式URL）
  * @param {string} userToken - 用户Token
  * @param {string} profileId - 订阅组ID
  * @param {string} profileToken - 订阅组Token
  * @param {Request} request - 请求对象
  * @param {Object} env - 环境变量
  * @param {Object} config - 配置对象
+ * @param {Object} context - 上下文对象（包含waitUntil）
  * @returns {Promise<Response>} - 响应对象
  */
-async function handleUserSubscription(userToken, profileId, profileToken, request, env, config) {
+async function handleUserSubscription(userToken, profileId, profileToken, request, env, config, context) {
     try {
         const asyncConfig = getConfig();
         
@@ -1722,6 +1825,12 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
                 status: 403,
                 headers: { 'Content-Type': 'text/plain' }
             });
+        }
+        
+        // 0.5 🌐 检测浏览器访问（只允许代理客户端访问）
+        if (isBrowserAccess(userAgent)) {
+            console.log(`🌐 Blocked browser request from: ${userAgent}`);
+            return getBrowserBlockedResponse();
         }
         
         // 1. 验证profileToken
@@ -1790,6 +1899,26 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         userData.stats.totalRequests = (userData.stats.totalRequests || 0) + 1;
         userData.stats.lastRequest = Date.now();
         await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+        
+        // 6.5 发送访问通知（每次访问都通知，与二段式行为一致）
+        if (config.BotToken && config.ChatID) {
+            const domain = new URL(request.url).hostname;
+            const lastAccessTime = new Date(userData.stats.lastRequest).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+            const expiresTime = userData.expiresAt ? new Date(userData.expiresAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : 'N/A';
+            const statusEmoji = userData.status === 'activated' ? '✅' : '🔄';
+            
+            const additionalData = `*域名:* \`${domain}\`
+*客户端:* \`${userAgent}\`
+*Token:* \`${userToken}\`
+*订阅组:* \`${profileId}\`
+*状态:* ${statusEmoji} \`${userData.status}\`
+*总访问次数:* \`${userData.stats.totalRequests}\`
+*上次访问:* \`${lastAccessTime}\`
+*到期时间:* \`${expiresTime}\``;
+            
+            // 使用waitUntil异步发送，不阻塞响应（与二段式行为一致）
+            context.waitUntil(sendEnhancedTgNotification(config, '🛰️ *订阅被访问*', request, additionalData));
+        }
         
         // 7. 加载订阅组配置
         const storageAdapter = await getStorageAdapter(env);
@@ -1907,6 +2036,12 @@ async function handleMisubRequest(context) {
     const url = new URL(request.url);
     const userAgentHeader = request.headers.get('User-Agent') || "Unknown";
 
+    // 🌐 检测浏览器访问（只允许代理客户端访问）
+    if (isBrowserAccess(userAgentHeader)) {
+        console.log(`🌐 Blocked browser request from: ${userAgentHeader}`);
+        return getBrowserBlockedResponse();
+    }
+
     const storageAdapter = await getStorageAdapter(env);
     const [settingsData, misubsData, profilesData] = await Promise.all([
         storageAdapter.get(KV_KEY_SETTINGS),
@@ -1946,7 +2081,7 @@ async function handleMisubRequest(context) {
     
     // 如果是三段式URL（用户订阅），使用专门的处理函数
     if (userToken) {
-        return await handleUserSubscription(userToken, profileIdentifier, token, request, env, config);
+        return await handleUserSubscription(userToken, profileIdentifier, token, request, env, config, context);
     }
 
     let targetMisubs;
