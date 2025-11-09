@@ -1715,160 +1715,160 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
                 headers: { 'Content-Type': 'text/plain' }
             });
         }
-    
-    // 1. 验证profileToken
-    if (profileToken !== config.profileToken) {
-        return new Response('Invalid Profile Token', { status: 403 });
-    }
-    
-    // 2. 加载用户数据
-    const userDataRaw = await env.MISUB_KV.get(`user:${userToken}`);
-    if (!userDataRaw) {
-        return new Response('订阅链接无效或已被删除', { status: 404 });
-    }
-    
-    const userData = JSON.parse(userDataRaw);
-    
-    // 3. 验证profileId匹配
-    if (userData.profileId !== profileId) {
-        return new Response('订阅组不匹配', { status: 403 });
-    }
-    
-    // 4. 首次激活（Bot已在函数开头拦截）
-    if (userData.status === 'pending') {
-        // 真实用户请求，执行激活
-        userData.status = 'activated';
-        userData.activatedAt = Date.now();
-        userData.expiresAt = Date.now() + userData.duration;
         
-        // 保存激活状态
-        await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+        // 1. 验证profileToken
+        if (profileToken !== config.profileToken) {
+            return new Response('Invalid Profile Token', { status: 403 });
+        }
         
-        // 发送Telegram通知
-        if (asyncConfig.telegram.NOTIFY_ON_ACTIVATION && config.BotToken && config.ChatID) {
-            const clientIp = request.headers.get('CF-Connecting-IP') || 'Unknown';
-            const activatedTime = new Date(userData.activatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
-            const expiresTime = new Date(userData.expiresAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+        // 2. 加载用户数据
+        const userDataRaw = await env.MISUB_KV.get(`user:${userToken}`);
+        if (!userDataRaw) {
+            return new Response('订阅链接无效或已被删除', { status: 404 });
+        }
+        
+        const userData = JSON.parse(userDataRaw);
+        
+        // 3. 验证profileId匹配
+        if (userData.profileId !== profileId) {
+            return new Response('订阅组不匹配', { status: 403 });
+        }
+        
+        // 4. 首次激活（Bot已在函数开头拦截）
+        if (userData.status === 'pending') {
+            // 真实用户请求，执行激活
+            userData.status = 'activated';
+            userData.activatedAt = Date.now();
+            userData.expiresAt = Date.now() + userData.duration;
             
-            await sendEnhancedTgNotification(config, '✅ 订阅已激活', request, `
+            // 保存激活状态
+            await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+            
+            // 发送Telegram通知
+            if (asyncConfig.telegram.NOTIFY_ON_ACTIVATION && config.BotToken && config.ChatID) {
+                const clientIp = request.headers.get('CF-Connecting-IP') || 'Unknown';
+                const activatedTime = new Date(userData.activatedAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                const expiresTime = new Date(userData.expiresAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                
+                await sendEnhancedTgNotification(config, '✅ 订阅已激活', request, `
 *Token:* \`${userToken}\`
 *订阅组:* \`${profileId}\`
 *客户端:* \`${userAgent}\`
 *激活时间:* \`${activatedTime}\`
 *到期时间:* \`${expiresTime}\`
-            `);
+                `);
+            }
         }
-    }
-    
-    // 5. 检查是否过期
-    if (userData.expiresAt && Date.now() > userData.expiresAt) {
-        const expiredNode = `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('订阅已过期')}`;
-        const noticeNodes = [
-            `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('请续费或联系服务商')}`,
-            `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('Token: ' + userToken)}`
-        ];
         
-        return new Response([expiredNode, ...noticeNodes].join('\n'), {
+        // 5. 检查是否过期
+        if (userData.expiresAt && Date.now() > userData.expiresAt) {
+            const expiredNode = `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('订阅已过期')}`;
+            const noticeNodes = [
+                `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('请续费或联系服务商')}`,
+                `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('Token: ' + userToken)}`
+            ];
+            
+            return new Response([expiredNode, ...noticeNodes].join('\n'), {
+                headers: {
+                    'Content-Type': 'text/plain; charset=utf-8',
+                    'Content-Disposition': `attachment; filename="${config.FileName}.txt"`,
+                    'Subscription-UserInfo': `upload=0; download=0; total=0; expire=${Math.floor(userData.expiresAt / 1000)}`
+                }
+            });
+        }
+        
+        // 6. 更新访问统计
+        userData.stats.totalRequests = (userData.stats.totalRequests || 0) + 1;
+        userData.stats.lastRequest = Date.now();
+        await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+        
+        // 7. 加载订阅组配置
+        const storageAdapter = await getStorageAdapter(env);
+        const allProfiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
+        const profile = allProfiles.find(p => 
+            (p.customId && p.customId === profileId) || p.id === profileId
+        );
+        
+        if (!profile || !profile.enabled) {
+            return new Response('订阅组不存在或已禁用', { status: 404 });
+        }
+        
+        // 8. 加载所有订阅和手动节点
+        const allMisubs = await storageAdapter.get(KV_KEY_SUBS) || [];
+        const profileSubIds = new Set(profile.subscriptions || []);
+        const profileNodeIds = new Set(profile.manualNodes || []);
+        
+        const targetMisubs = allMisubs.filter(item => {
+            const isSubscription = item.url.startsWith('http');
+            const isManualNode = !isSubscription;
+            const belongsToProfile = (isSubscription && profileSubIds.has(item.id)) || 
+                                    (isManualNode && profileNodeIds.has(item.id));
+            return item.enabled && belongsToProfile;
+        });
+        
+        // 9. 获取订阅组的配置
+        const effectiveSubConverter = profile.subConverter && profile.subConverter.trim() !== '' 
+            ? profile.subConverter 
+            : config.subConverter;
+        const effectiveSubConfig = profile.subConfig && profile.subConfig.trim() !== '' 
+            ? profile.subConfig 
+            : config.subConfig;
+        
+        // 10. 生成订阅内容（使用现有逻辑）
+        const nodeLinks = await processSubscriptions(targetMisubs, config, request, profile);
+        
+        // 调试日志
+        console.log(`[UserSub] userToken: ${userToken}, profileId: ${profileId}`);
+        console.log(`[UserSub] targetMisubs count: ${targetMisubs.length}`);
+        console.log(`[UserSub] nodeLinks length: ${nodeLinks?.length || 0}`);
+        console.log(`[UserSub] nodeLinks preview: ${nodeLinks?.substring(0, 100)}`);
+        
+        // 11. 判断请求格式
+        const formatParam = new URL(request.url).searchParams.get('format')?.toLowerCase();
+        // 使用函数开头定义的userAgent变量
+        const preferClash = userAgent.toLowerCase().includes('clash') || formatParam === 'clash';
+        
+        let finalContent;
+        let contentType = 'text/plain; charset=utf-8';
+        let filename = `${profile.name || config.FileName}.txt`;
+        
+        if (preferClash || formatParam === 'yaml') {
+            // Clash格式
+            try {
+                const clashConfig = yaml.load(effectiveSubConfig || '{}');
+                clashConfig.proxies = [];
+                
+                // 解析节点链接并转换为Clash格式（这里简化处理，实际需要完整的转换逻辑）
+                const lines = nodeLinks.split('\n').filter(line => line.trim());
+                for (const line of lines) {
+                    // TODO: 完整的节点解析和转换逻辑
+                    // 这里暂时保留原始链接
+                }
+                
+                finalContent = yaml.dump(clashConfig);
+                contentType = 'text/yaml; charset=utf-8';
+                filename = `${profile.name || config.FileName}.yaml`;
+            } catch (e) {
+                // Clash格式转换失败，回退到Base64编码的原始格式
+                finalContent = btoa(unescape(encodeURIComponent(nodeLinks)));
+                contentType = 'text/plain; charset=utf-8';
+                filename = `${profile.name || config.FileName}.txt`;
+            }
+        } else {
+            // 原始格式 - 需要Base64编码（Shadowrocket等客户端需要）
+            finalContent = btoa(unescape(encodeURIComponent(nodeLinks)));
+        }
+        
+        // 12. 返回订阅内容
+        return new Response(finalContent, {
             headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-                'Content-Disposition': `attachment; filename="${config.FileName}.txt"`,
-                'Subscription-UserInfo': `upload=0; download=0; total=0; expire=${Math.floor(userData.expiresAt / 1000)}`
+                'Content-Type': contentType,
+                'Content-Disposition': `attachment; filename="${filename}"`,
+                'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(userData.expiresAt / 1000)}`,
+                'Profile-Update-Interval': '24',
+                'Profile-Title': profile.name || config.FileName
             }
         });
-    }
-    
-    // 6. 更新访问统计
-    userData.stats.totalRequests = (userData.stats.totalRequests || 0) + 1;
-    userData.stats.lastRequest = Date.now();
-    await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
-    
-    // 7. 加载订阅组配置
-    const storageAdapter = await getStorageAdapter(env);
-    const allProfiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
-    const profile = allProfiles.find(p => 
-        (p.customId && p.customId === profileId) || p.id === profileId
-    );
-    
-    if (!profile || !profile.enabled) {
-        return new Response('订阅组不存在或已禁用', { status: 404 });
-    }
-    
-    // 8. 加载所有订阅和手动节点
-    const allMisubs = await storageAdapter.get(KV_KEY_SUBS) || [];
-    const profileSubIds = new Set(profile.subscriptions || []);
-    const profileNodeIds = new Set(profile.manualNodes || []);
-    
-    const targetMisubs = allMisubs.filter(item => {
-        const isSubscription = item.url.startsWith('http');
-        const isManualNode = !isSubscription;
-        const belongsToProfile = (isSubscription && profileSubIds.has(item.id)) || 
-                                (isManualNode && profileNodeIds.has(item.id));
-        return item.enabled && belongsToProfile;
-    });
-    
-    // 9. 获取订阅组的配置
-    const effectiveSubConverter = profile.subConverter && profile.subConverter.trim() !== '' 
-        ? profile.subConverter 
-        : config.subConverter;
-    const effectiveSubConfig = profile.subConfig && profile.subConfig.trim() !== '' 
-        ? profile.subConfig 
-        : config.subConfig;
-    
-    // 10. 生成订阅内容（使用现有逻辑）
-    const nodeLinks = await processSubscriptions(targetMisubs, config, request, profile);
-    
-    // 调试日志
-    console.log(`[UserSub] userToken: ${userToken}, profileId: ${profileId}`);
-    console.log(`[UserSub] targetMisubs count: ${targetMisubs.length}`);
-    console.log(`[UserSub] nodeLinks length: ${nodeLinks?.length || 0}`);
-    console.log(`[UserSub] nodeLinks preview: ${nodeLinks?.substring(0, 100)}`);
-    
-    // 11. 判断请求格式
-    const formatParam = new URL(request.url).searchParams.get('format')?.toLowerCase();
-    // 使用函数开头定义的userAgent变量
-    const preferClash = userAgent.toLowerCase().includes('clash') || formatParam === 'clash';
-    
-    let finalContent;
-    let contentType = 'text/plain; charset=utf-8';
-    let filename = `${profile.name || config.FileName}.txt`;
-    
-    if (preferClash || formatParam === 'yaml') {
-        // Clash格式
-        try {
-            const clashConfig = yaml.load(effectiveSubConfig || '{}');
-            clashConfig.proxies = [];
-            
-            // 解析节点链接并转换为Clash格式（这里简化处理，实际需要完整的转换逻辑）
-            const lines = nodeLinks.split('\n').filter(line => line.trim());
-            for (const line of lines) {
-                // TODO: 完整的节点解析和转换逻辑
-                // 这里暂时保留原始链接
-            }
-            
-            finalContent = yaml.dump(clashConfig);
-            contentType = 'text/yaml; charset=utf-8';
-            filename = `${profile.name || config.FileName}.yaml`;
-        } catch (e) {
-            // Clash格式转换失败，回退到Base64编码的原始格式
-            finalContent = btoa(unescape(encodeURIComponent(nodeLinks)));
-            contentType = 'text/plain; charset=utf-8';
-            filename = `${profile.name || config.FileName}.txt`;
-        }
-    } else {
-        // 原始格式 - 需要Base64编码（Shadowrocket等客户端需要）
-        finalContent = btoa(unescape(encodeURIComponent(nodeLinks)));
-    }
-    
-    // 12. 返回订阅内容
-    return new Response(finalContent, {
-        headers: {
-            'Content-Type': contentType,
-            'Content-Disposition': `attachment; filename="${filename}"`,
-            'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(userData.expiresAt / 1000)}`,
-            'Profile-Update-Interval': '24',
-            'Profile-Title': profile.name || config.FileName
-        }
-    });
     } catch (error) {
         // 捕获所有错误并返回详细信息
         console.error(`[UserSub Error] ${error.message}`, error.stack);
