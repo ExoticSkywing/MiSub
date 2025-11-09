@@ -1768,10 +1768,11 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
                 `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('Token: ' + userToken)}`
             ];
             
-            return new Response([expiredNode, ...noticeNodes].join('\n'), {
+            const expiredContent = [expiredNode, ...noticeNodes].join('\n');
+            return new Response(btoa(unescape(encodeURIComponent(expiredContent))), {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
-                    'Content-Disposition': `attachment; filename="${config.FileName}.txt"`,
+                    'Cache-Control': 'no-store, no-cache',
                     'Subscription-UserInfo': `upload=0; download=0; total=0; expire=${Math.floor(userData.expiresAt / 1000)}`
                 }
             });
@@ -1866,11 +1867,11 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             finalContent = btoa(unescape(encodeURIComponent(nodeLinks)));
         }
         
-        // 12. 返回订阅内容
+        // 12. 返回订阅内容（复用正常订阅的响应头设置）
         return new Response(finalContent, {
             headers: {
                 'Content-Type': contentType,
-                'Content-Disposition': `attachment; filename="${filename}"`,
+                'Cache-Control': 'no-store, no-cache',
                 'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(userData.expiresAt / 1000)}`,
                 'Profile-Update-Interval': '24',
                 'Profile-Title': profile.name || config.FileName
@@ -1886,7 +1887,7 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         return new Response(btoa(unescape(encodeURIComponent(errorContent))), {
             headers: {
                 'Content-Type': 'text/plain; charset=utf-8',
-                'Content-Disposition': `attachment; filename="error.txt"`
+                'Cache-Control': 'no-store, no-cache'
             }
         });
     }
