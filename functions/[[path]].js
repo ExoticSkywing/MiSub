@@ -235,7 +235,8 @@ const defaultSettings = {
   },
   NotifyThresholdDays: 3,
   NotifyThresholdPercent: 90,
-  storageType: 'kv' // 新增：数据存储类型，默认 KV，可选 'd1'
+  storageType: 'kv', // 新增：数据存储类型，默认 KV，可选 'd1'
+  GeoIPSource: 'cloudflare' // 地理信息来源：'cloudflare'(推荐,免费快速) 或 'ip-api'(需外部请求)
 };
 
 const formatBytes = (bytes, decimals = 2) => {
@@ -284,41 +285,66 @@ async function sendTgNotification(settings, message) {
 }
 
 /**
- * 增强版TG通知，包含IP地理位置信息
+ * 发送增强版Telegram通知，包含IP地理位置信息
  * @param {Object} settings - 设置对象
  * @param {string} type - 通知类型
- * @param {string} clientIp - 客户端IP
+ * @param {Request} request - Cloudflare Workers Request 对象
  * @param {string} additionalData - 额外数据
  * @returns {Promise<boolean>} - 是否发送成功
  */
-async function sendEnhancedTgNotification(settings, type, clientIp, additionalData = '') {
+async function sendEnhancedTgNotification(settings, type, request, additionalData = '') {
   if (!settings.BotToken || !settings.ChatID) {
     return false;
   }
   
+  const clientIp = request.headers.get('CF-Connecting-IP') || 'N/A';
   let locationInfo = '';
   
-  // 尝试获取IP地理位置信息
-  try {
-    const response = await fetch(`http://ip-api.com/json/${clientIp}?lang=zh-CN`, {
-      cf: { 
-        // 设置较短的超时时间，避免影响主请求
-        timeout: 3000 
-      }
-    });
-    
-    if (response.ok) {
-      const ipInfo = await response.json();
-      if (ipInfo.status === 'success') {
-        locationInfo = `
+  // 地理信息来源配置：'cloudflare' (默认) 或 'ip-api'
+  const geoSource = settings.GeoIPSource || 'cloudflare';
+  
+  // 方式1：使用 Cloudflare 原生数据（推荐，免费且快速）
+  if (geoSource === 'cloudflare' && request.cf) {
+    try {
+      const cf = request.cf;
+      const country = cf.country || 'N/A';
+      const city = cf.city || 'N/A';
+      const asn = cf.asn ? `AS${cf.asn}` : 'N/A';
+      const isp = cf.asOrganization || 'N/A';
+      
+      locationInfo = `
+*国家:* \`${country}\`
+*城市:* \`${city}\`
+*ISP:* \`${isp}\`
+*ASN:* \`${asn}\``;
+    } catch (error) {
+      // Cloudflare 数据获取失败，忽略错误
+    }
+  }
+  
+  // 方式2：使用 ip-api.com（备选方案，需要外部请求）
+  if (geoSource === 'ip-api' || !locationInfo) {
+    try {
+      const response = await fetch(`http://ip-api.com/json/${clientIp}?lang=zh-CN`, {
+        cf: { 
+          // 设置较短的超时时间，避免影响主请求
+          timeout: 3000 
+        }
+      });
+      
+      if (response.ok) {
+        const ipInfo = await response.json();
+        if (ipInfo.status === 'success') {
+          locationInfo = `
 *国家:* \`${ipInfo.country || 'N/A'}\`
 *城市:* \`${ipInfo.city || 'N/A'}\`
 *ISP:* \`${ipInfo.org || 'N/A'}\`
 *ASN:* \`${ipInfo.as || 'N/A'}\``;
+        }
       }
+    } catch (error) {
+      // 获取IP位置信息失败，忽略错误
     }
-  } catch (error) {
-    // 获取IP位置信息失败，忽略错误
   }
   
   // 构建完整消息
@@ -1560,7 +1586,7 @@ async function handleMisubRequest(context) {
         }
         
         // 使用增强版TG通知，包含IP地理位置信息
-        context.waitUntil(sendEnhancedTgNotification(config, '🛰️ *订阅被访问*', clientIp, additionalData));
+        context.waitUntil(sendEnhancedTgNotification(config, '🛰️ *订阅被访问*', request, additionalData));
     }
 
     let prependedContentForSubconverter = '';
