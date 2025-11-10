@@ -16,8 +16,8 @@ export const ANTI_SHARE_CONFIG = {
   RATE_LIMITS: {
     1: 3,   // 1台设备：2次/天（测试建议：2-3次）
     2: 5,   // 2台设备：4次/天（测试建议：4-5次）
-    3: 7,   // 3台设备：6次/天
-    4: 9    // 4台设备：8次/天
+    3: 15,   // 3台设备：6次/天
+    4: 20    // 4台设备：8次/天
   }
 };
 
@@ -88,10 +88,11 @@ export const GEOIP_CONFIG = {
 // Telegram 通知配置
 // ============================================
 export const TELEGRAM_CONFIG = {
-  NOTIFY_ON_ACTIVATION: true,      // 是否发送激活通知
-  NOTIFY_ON_DEVICE_LIMIT: true,    // 是否发送设备数超限通知
-  NOTIFY_ON_CITY_MISMATCH: true,   // 是否发送城市不匹配通知
-  NOTIFY_ON_RATE_LIMIT: true       // 是否发送访问次数超限通知
+  NOTIFY_ON_ACTIVATION: true,        // 是否发送激活通知
+  NOTIFY_ON_NEW_DEVICE: true,        // 是否发送新设备绑定成功通知
+  NOTIFY_ON_DEVICE_LIMIT: true,      // 是否发送设备数超限通知
+  NOTIFY_ON_CITY_MISMATCH: true,     // 是否发送城市不匹配通知
+  NOTIFY_ON_RATE_LIMIT: true         // 是否发送访问次数超限通知
 };
 
 // ============================================

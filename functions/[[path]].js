@@ -2034,6 +2034,19 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
             requestCount: 0,
             cities: {}
         };
+        
+        // 发送新设备绑定成功通知
+        if (config.telegram.NOTIFY_ON_NEW_DEVICE) {
+            const newDeviceCount = Object.keys(userData.devices).length;
+            const additionalData = `*Token:* \`${userToken}\`
+*设备ID:* \`${deviceId}\`
+*设备UA:* \`${userAgent}\`
+*城市:* \`${city}\`
+*当前设备数:* \`${newDeviceCount}\`/${config.antiShare.MAX_DEVICES}
+*IP:* \`${clientIp}\`
+*绑定时间:* \`${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\``;
+            context.waitUntil(sendEnhancedTgNotification(settings, '✅ *新设备绑定成功*', request, additionalData));
+        }
     }
     
     const device = userData.devices[deviceId];
