@@ -1835,8 +1835,9 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
         // 发送Telegram通知
         if (config.telegram.NOTIFY_ON_DEVICE_LIMIT) {
             const additionalData = `*Token:* \`${userToken}\`
-*当前设备数:* \`${deviceCount}\`
+*已有设备数:* \`${deviceCount}\`
 *限制数量:* \`${config.antiShare.MAX_DEVICES}\`
+*尝试添加:* 第${deviceCount + 1}台设备
 *新设备ID:* \`${deviceId}\`
 *新设备UA:* \`${userAgent}\`
 *城市:* \`${city}\`
@@ -1852,7 +1853,51 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
         };
     }
     
-    // 5. 初始化设备（如果是新设备）
+    // 5. 【城市检测前置】先检查城市，避免提前初始化设备
+    // 判断是否需要城市检测（基于当前设备数，不包含新设备）
+    const potentialDeviceCount = isNewDevice ? deviceCount + 1 : deviceCount;
+    const shouldCheckCity = potentialDeviceCount > config.antiShare.CITY_CHECK_START_INDEX;
+    
+    if (shouldCheckCity && isNewDevice) {
+        // 获取整个账户下所有设备的所有城市key（小写，去重）
+        const allCityKeysSet = new Set();
+        const allCitiesForDisplay = [];
+        Object.values(userData.devices).forEach(dev => {
+            Object.values(dev.cities).forEach(cityInfo => {
+                const key = cityInfo.city.toLowerCase();
+                if (!allCityKeysSet.has(key)) {
+                    allCityKeysSet.add(key);
+                    allCitiesForDisplay.push(cityInfo.city);
+                }
+            });
+        });
+        
+        // 新设备 + 新城市检测
+        if (allCityKeysSet.size > 0 && !allCityKeysSet.has(cityKey)) {
+            // 新设备但账户已有其他城市记录 → 可疑的多设备共享
+            if (config.telegram.NOTIFY_ON_CITY_MISMATCH) {
+                const additionalData = `*Token:* \`${userToken}\`
+*设备ID:* \`${deviceId}\`
+*设备UA:* \`${userAgent}\`
+*账户已有城市:* \`${allCitiesForDisplay.join(', ')}\`
+*当前城市:* \`${city}\`
+*已有设备数:* \`${deviceCount}\`
+*尝试添加:* 第${deviceCount + 1}台设备
+*IP:* \`${clientIp}\`
+*原因:* 新设备+新城市（可疑共享）`;
+                context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *新设备新城市*', request, additionalData));
+            }
+            
+            return {
+                allowed: false,
+                reason: 'new_device_new_city',
+                deviceId,
+                city
+            };
+        }
+    }
+    
+    // 6. 初始化设备（所有检测通过后才初始化）
     if (isNewDevice) {
         userData.devices[deviceId] = {
             deviceId,
@@ -1868,69 +1913,32 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
     const isNewCity = !device.cities[cityKey];
     const currentDeviceCount = Object.keys(userData.devices).length;
     
-    // 6. 判断是否需要城市检测
-    const shouldCheckCity = currentDeviceCount > config.antiShare.CITY_CHECK_START_INDEX;
-    
-    // 【检测2】城市检测（启用城市检测后）
-    if (shouldCheckCity && isNewCity) {
-        // 获取整个账户下所有设备的所有城市（去重）
-        const allCitiesSet = new Set();
-        Object.values(userData.devices).forEach(dev => {
-            Object.values(dev.cities).forEach(cityInfo => {
-                allCitiesSet.add(cityInfo.city);
-            });
-        });
-        const allExistingCities = Array.from(allCitiesSet);
-        
+    // 【检测2】已存在设备的城市变化检测
+    // 注意：新设备的城市检测已在前面处理，这里只处理已存在设备
+    if (shouldCheckCity && isNewCity && !isNewDevice) {
         // 获取当前设备已使用的城市
         const deviceCities = Object.values(device.cities).map(c => c.city);
         
-        if (isNewDevice) {
-            // 新设备 + 新城市
-            // 检查：账户下是否已有其他城市（如果有，说明可能是共享）
-            if (allExistingCities.length > 0) {
-                // 新设备但账户已有其他城市记录 → 可疑的多设备共享
-                if (config.telegram.NOTIFY_ON_CITY_MISMATCH) {
-                    const additionalData = `*Token:* \`${userToken}\`
-*设备ID:* \`${deviceId}\`
-*设备UA:* \`${userAgent}\`
-*账户已有城市:* \`${allExistingCities.join(', ')}\`
-*当前城市:* \`${city}\`
-*当前设备数:* \`${currentDeviceCount}\`
-*IP:* \`${clientIp}\`
-*原因:* 新设备+新城市（可疑共享）`;
-                    context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *新设备新城市*', request, additionalData));
-                }
-                
-                return {
-                    allowed: false,
-                    reason: 'new_device_new_city',
-                    deviceId,
-                    city
-                };
-            }
-            // else: 新设备第一次访问且账户无其他城市记录，放行，建立基线
-        } else {
-            // 已存在设备 + 新城市 → 拒绝（疑似使用代理）
-            if (config.telegram.NOTIFY_ON_CITY_MISMATCH) {
-                const additionalData = `*Token:* \`${userToken}\`
+        // 已存在设备 + 新城市 → 拒绝（疑似使用代理）
+        if (config.telegram.NOTIFY_ON_CITY_MISMATCH) {
+            const additionalData = `*Token:* \`${userToken}\`
 *设备ID:* \`${deviceId}\`
 *设备UA:* \`${userAgent}\`
 *该设备已使用城市:* \`${deviceCities.join(', ')}\`
 *当前城市:* \`${city}\`
+*设备数:* \`${currentDeviceCount}\`
 *IP:* \`${clientIp}\`
 *原因:* 已存在设备访问新城市（疑似代理）`;
-                context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *城市异常*', request, additionalData));
-            }
-            
-            return {
-                allowed: false,
-                reason: 'existing_device_new_city',
-                deviceId,
-                city,
-                existingCities: deviceCities
-            };
+            context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *城市异常*', request, additionalData));
         }
+        
+        return {
+            allowed: false,
+            reason: 'existing_device_new_city',
+            deviceId,
+            city,
+            existingCities: deviceCities
+        };
     }
     
     // 【检测3】访问次数限制
