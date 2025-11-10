@@ -2143,7 +2143,26 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
         if (userData.suspend.until && now >= userData.suspend.until) {
             // 封禁已过期，自动解冻
             console.log(`[AntiShare] Account ${userToken} auto-unfrozen after suspension`);
+            
+            // 发送解封通知
+            if (config.telegram.NOTIFY_ON_NEW_DEVICE) {
+                const additionalData = `*Token:* \`${userToken}\`
+*解封时间:* \`${new Date(now).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\`
+*状态:* ✅ 封禁已过期，账号已自动恢复
+*失败计数已重置:* 0次
+
+您现在可以正常使用订阅服务。`;
+                context.waitUntil(sendEnhancedTgNotification(settings, '✅ *账号已自动解封*', request, additionalData));
+            }
+            
             delete userData.suspend;
+            
+            // 重置失败计数器，给用户一个新的开始
+            userData.stats.failedAttempts = 0;
+            userData.stats.rateLimitAttempts = 0;
+            
+            // 保存解封状态到KV
+            await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
         } else {
             // 封禁仍然有效，拒绝访问
             console.log(`[AntiShare] Account ${userToken} is suspended until ${new Date(userData.suspend.until).toISOString()}`);
@@ -2242,11 +2261,25 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                     
                     // 发送Telegram封禁通知
                     const unfreezeDate = new Date(suspendUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                    
+                    // 格式化封禁时长
+                    let durationText = '';
+                    const days = config.antiShare.SUSPEND_DURATION_DAYS;
+                    if (days >= 1) {
+                        durationText = `${days}天`;
+                    } else if (days >= 1/24) {
+                        const hours = Math.round(days * 24);
+                        durationText = `${hours}小时`;
+                    } else {
+                        const minutes = Math.round(days * 24 * 60);
+                        durationText = `${minutes}分钟`;
+                    }
+                    
                     const additionalData = `*Token:* \`${userToken}\`
 *设备ID:* \`${deviceId}\`
 *城市:* \`${city}\`
 *IP:* \`${clientIp}\`
-*封禁时长:* ${config.antiShare.SUSPEND_DURATION_DAYS}天
+*封禁时长:* ${durationText}
 *解封时间:* \`${unfreezeDate}\`
 
 *触发原因:*
@@ -2372,11 +2405,25 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                         
                         // 发送Telegram封禁通知
                         const unfreezeDate = new Date(suspendUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                        
+                        // 格式化封禁时长
+                        let durationText = '';
+                        const days = config.antiShare.SUSPEND_DURATION_DAYS;
+                        if (days >= 1) {
+                            durationText = `${days}天`;
+                        } else if (days >= 1/24) {
+                            const hours = Math.round(days * 24);
+                            durationText = `${hours}小时`;
+                        } else {
+                            const minutes = Math.round(days * 24 * 60);
+                            durationText = `${minutes}分钟`;
+                        }
+                        
                         const notificationData = `*Token:* \`${userToken}\`
 *设备ID:* \`${deviceId}\`
 *城市:* \`${city}\`
 *IP:* \`${clientIp}\`
-*封禁时长:* ${config.antiShare.SUSPEND_DURATION_DAYS}天
+*封禁时长:* ${durationText}
 *解封时间:* \`${unfreezeDate}\`
 
 *触发原因:*
@@ -2492,11 +2539,25 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
             
             // 发送Telegram封禁通知
             const unfreezeDate = new Date(suspendUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+            
+            // 格式化封禁时长
+            let durationText = '';
+            const days = config.antiShare.SUSPEND_DURATION_DAYS;
+            if (days >= 1) {
+                durationText = `${days}天`;
+            } else if (days >= 1/24) {
+                const hours = Math.round(days * 24);
+                durationText = `${hours}小时`;
+            } else {
+                const minutes = Math.round(days * 24 * 60);
+                durationText = `${minutes}分钟`;
+            }
+            
             let additionalData = `*Token:* \`${userToken}\`
 *设备ID:* \`${deviceId}\`
 *城市:* \`${city}\`
 *IP:* \`${clientIp}\`
-*封禁时长:* ${config.antiShare.SUSPEND_DURATION_DAYS}天
+*封禁时长:* ${durationText}
 *解封时间:* \`${unfreezeDate}\`
 
 *触发原因:*`;
