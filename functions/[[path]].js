@@ -1692,6 +1692,294 @@ async function generateCombinedNodeList(context, config, userAgent, misubs, prep
     return finalNodeList;
 }
 
+// ============================================
+// 反共享机制相关函数
+// ============================================
+
+/**
+ * 生成设备ID（hash User-Agent）
+ * @param {string} userAgent - User-Agent字符串
+ * @returns {string} - 设备ID（36进制hash）
+ */
+function getDeviceId(userAgent) {
+    let hash = 0;
+    for (let i = 0; i < userAgent.length; i++) {
+        const char = userAgent.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    return hash.toString(36); // 返回36进制字符串
+}
+
+/**
+ * 从IP获取城市信息
+ * @param {string} clientIp - 客户端IP
+ * @param {Request} request - 请求对象
+ * @param {Object} config - 配置对象
+ * @returns {Promise<Object>} - 城市信息 { city: "Tokyo" }
+ */
+async function getCityFromIP(clientIp, request, config) {
+    // 优先使用Cloudflare的地理信息
+    if (request.cf && request.cf.city) {
+        return { city: request.cf.city };
+    }
+    
+    // 如果CF数据不可用，尝试GeoIP API（复用现有逻辑）
+    // 这里简化处理，实际可以调用GeoIP API
+    // 但为了避免重复调用，优先使用CF数据
+    
+    return { city: 'Unknown' };
+}
+
+/**
+ * 生成设备数超限错误节点
+ * @param {number} deviceCount - 当前设备数
+ * @param {number} maxDevices - 最大设备数
+ * @returns {string} - Base64编码的错误节点
+ */
+function generateDeviceLimitError(deviceCount, maxDevices) {
+    const errorNodes = [
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⛔ 设备数超限')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`当前: ${deviceCount}台 / 限制: ${maxDevices}台`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ 请勿多设备共享订阅')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('如需更多设备，请联系服务商')}`
+    ];
+    return errorNodes.join('\n');
+}
+
+/**
+ * 生成新设备+新城市错误节点
+ * @returns {string} - Base64编码的错误节点
+ */
+function generateNewDeviceNewCityError() {
+    const errorNodes = [
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🚫 新设备+新城市')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('检测到可疑的共享行为')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ 请使用常用节点或关闭代理')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('如需添加新设备，请先使用已有城市')}`
+    ];
+    return errorNodes.join('\n');
+}
+
+/**
+ * 生成已存在设备+新城市错误节点
+ * @param {string} deviceId - 设备ID
+ * @param {Array<string>} existingCities - 已存在的城市列表
+ * @param {string} newCity - 当前城市
+ * @returns {string} - Base64编码的错误节点
+ */
+function generateExistingDeviceNewCityError(deviceId, existingCities, newCity) {
+    const cityList = existingCities.join(', ');
+    const errorNodes = [
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🌍 城市异常检测')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`已使用城市: ${cityList}`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`当前城市: ${newCity}`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ 请使用常用节点或关闭代理后重试')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('如持续出现此提示，请联系服务商')}`
+    ];
+    return errorNodes.join('\n');
+}
+
+/**
+ * 生成访问次数超限错误节点
+ * @param {number} dailyCount - 今日访问次数
+ * @param {number} rateLimit - 访问次数限制
+ * @param {number} deviceCount - 当前设备数
+ * @returns {string} - Base64编码的错误节点
+ */
+function generateRateLimitError(dailyCount, rateLimit, deviceCount) {
+    const errorNodes = [
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⏰ 今日访问次数超限')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`已访问: ${dailyCount}次 / 限制: ${rateLimit}次`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`当前设备数: ${deviceCount}台`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⏳ 明天0点(UTC+8)重置访问次数')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('或减少设备数量以获得更多访问次数')}`
+    ];
+    return errorNodes.join('\n');
+}
+
+/**
+ * 反共享检测核心函数
+ * @param {string} userToken - 用户Token
+ * @param {Object} userData - 用户数据
+ * @param {Request} request - 请求对象
+ * @param {Object} env - 环境变量
+ * @param {Object} config - 配置对象
+ * @param {Object} context - 上下文对象
+ * @returns {Promise<Object>} - 检测结果 { allowed: boolean, reason?: string, ... }
+ */
+async function performAntiShareCheck(userToken, userData, request, env, config, context) {
+    const userAgent = request.headers.get('User-Agent') || 'Unknown';
+    const clientIp = request.headers.get('CF-Connecting-IP') || 'Unknown';
+    
+    // 1. 获取设备ID（hash User-Agent）
+    const deviceId = getDeviceId(userAgent);
+    
+    // 2. 获取城市信息
+    const cityInfo = await getCityFromIP(clientIp, request, config);
+    const city = cityInfo?.city || 'Unknown';
+    const cityKey = city.toLowerCase();
+    
+    // 3. 初始化数据结构
+    if (!userData.devices) {
+        userData.devices = {};
+    }
+    
+    // 4. 判断设备和城市是否存在
+    const isNewDevice = !userData.devices[deviceId];
+    const deviceCount = Object.keys(userData.devices).length;
+    
+    // 【检测1】设备数量限制（新设备才检查）
+    if (isNewDevice && deviceCount >= config.antiShare.MAX_DEVICES) {
+        // 发送Telegram通知
+        if (config.telegram.NOTIFY_ON_DEVICE_LIMIT) {
+            const additionalData = `*Token:* \`${userToken}\`
+*当前设备数:* \`${deviceCount}\`
+*限制数量:* \`${config.antiShare.MAX_DEVICES}\`
+*新设备ID:* \`${deviceId}\`
+*新设备UA:* \`${userAgent}\`
+*城市:* \`${city}\`
+*IP:* \`${clientIp}\``;
+            context.waitUntil(sendEnhancedTgNotification(config, '🚫 *设备数超限*', request, additionalData));
+        }
+        
+        return {
+            allowed: false,
+            reason: 'device_limit',
+            deviceCount,
+            maxDevices: config.antiShare.MAX_DEVICES
+        };
+    }
+    
+    // 5. 初始化设备（如果是新设备）
+    if (isNewDevice) {
+        userData.devices[deviceId] = {
+            deviceId,
+            userAgent,
+            firstSeen: Date.now(),
+            lastSeen: Date.now(),
+            requestCount: 0,
+            cities: {}
+        };
+    }
+    
+    const device = userData.devices[deviceId];
+    const isNewCity = !device.cities[cityKey];
+    const currentDeviceCount = Object.keys(userData.devices).length;
+    
+    // 6. 判断是否需要城市检测
+    const shouldCheckCity = currentDeviceCount > config.antiShare.CITY_CHECK_START_INDEX;
+    
+    // 【检测2】城市检测（启用城市检测后）
+    if (shouldCheckCity && isNewCity) {
+        const existingCities = Object.values(device.cities).map(c => c.city);
+        
+        if (isNewDevice) {
+            // 新设备 + 新城市 → 拒绝
+            if (config.telegram.NOTIFY_ON_CITY_MISMATCH) {
+                const additionalData = `*Token:* \`${userToken}\`
+*设备ID:* \`${deviceId}\`
+*设备UA:* \`${userAgent}\`
+*城市:* \`${city}\`
+*IP:* \`${clientIp}\`
+*原因:* 新设备+新城市（可疑共享）`;
+                context.waitUntil(sendEnhancedTgNotification(config, '🚫 *新设备新城市*', request, additionalData));
+            }
+            
+            return {
+                allowed: false,
+                reason: 'new_device_new_city',
+                deviceId,
+                city
+            };
+        } else {
+            // 已存在设备 + 新城市 → 拒绝
+            if (config.telegram.NOTIFY_ON_CITY_MISMATCH) {
+                const additionalData = `*Token:* \`${userToken}\`
+*设备ID:* \`${deviceId}\`
+*设备UA:* \`${userAgent}\`
+*已使用城市:* \`${existingCities.join(', ')}\`
+*当前城市:* \`${city}\`
+*IP:* \`${clientIp}\`
+*原因:* 已存在设备访问新城市（疑似代理）`;
+                context.waitUntil(sendEnhancedTgNotification(config, '🌍 *城市异常*', request, additionalData));
+            }
+            
+            return {
+                allowed: false,
+                reason: 'existing_device_new_city',
+                deviceId,
+                city,
+                existingCities
+            };
+        }
+    }
+    
+    // 【检测3】访问次数限制
+    const today = new Date().toISOString().split('T')[0];
+    
+    // 初始化或重置每日计数
+    if (!userData.stats.dailyDate || userData.stats.dailyDate !== today) {
+        userData.stats.dailyCount = 0;
+        userData.stats.dailyDate = today;
+    }
+    
+    const rateLimit = config.antiShare.RATE_LIMITS[currentDeviceCount] || 999;
+    
+    if (userData.stats.dailyCount >= rateLimit) {
+        // 发送Telegram通知
+        if (config.telegram.NOTIFY_ON_RATE_LIMIT) {
+            const additionalData = `*Token:* \`${userToken}\`
+*今日访问:* \`${userData.stats.dailyCount}\`
+*限制次数:* \`${rateLimit}\` (${currentDeviceCount}台设备)
+*设备ID:* \`${deviceId}\`
+*城市:* \`${city}\`
+*IP:* \`${clientIp}\`
+*重置时间:* 明天0点(UTC+8)`;
+            context.waitUntil(sendEnhancedTgNotification(config, '⏰ *访问次数超限*', request, additionalData));
+        }
+        
+        return {
+            allowed: false,
+            reason: 'rate_limit',
+            dailyCount: userData.stats.dailyCount,
+            rateLimit,
+            deviceCount: currentDeviceCount
+        };
+    }
+    
+    // ✅ 通过所有检测
+    // 更新设备统计
+    device.lastSeen = Date.now();
+    device.requestCount++;
+    
+    // 记录城市（不限制数量）
+    if (!device.cities[cityKey]) {
+        device.cities[cityKey] = {
+            city,
+            firstSeen: Date.now(),
+            lastSeen: Date.now(),
+            count: 0
+        };
+    }
+    device.cities[cityKey].lastSeen = Date.now();
+    device.cities[cityKey].count++;
+    
+    // 更新每日计数
+    userData.stats.dailyCount++;
+    
+    // 注意：不在这里保存KV，由调用方统一保存
+    // 这样避免重复保存，提高性能
+    
+    return {
+        allowed: true,
+        deviceId,
+        city,
+        deviceCount: currentDeviceCount,
+        dailyCount: userData.stats.dailyCount
+    };
+}
+
 /**
  * 检测是否为浏览器访问
  * @param {string} userAgent - User-Agent字符串
@@ -1879,9 +2167,61 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             });
         }
         
-        // 7. 更新访问统计
+        // 6.5 🛡️ 反共享检测（设备数、城市、访问次数）
+        const antiShareResult = await performAntiShareCheck(
+            userToken,
+            userData,
+            request,
+            env,
+            asyncConfig,
+            context
+        );
+        
+        if (!antiShareResult.allowed) {
+            let errorContent = '';
+            
+            switch (antiShareResult.reason) {
+                case 'device_limit':
+                    errorContent = generateDeviceLimitError(
+                        antiShareResult.deviceCount,
+                        antiShareResult.maxDevices
+                    );
+                    break;
+                    
+                case 'new_device_new_city':
+                    errorContent = generateNewDeviceNewCityError();
+                    break;
+                    
+                case 'existing_device_new_city':
+                    errorContent = generateExistingDeviceNewCityError(
+                        antiShareResult.deviceId,
+                        antiShareResult.existingCities,
+                        antiShareResult.city
+                    );
+                    break;
+                    
+                case 'rate_limit':
+                    errorContent = generateRateLimitError(
+                        antiShareResult.dailyCount,
+                        antiShareResult.rateLimit,
+                        antiShareResult.deviceCount
+                    );
+                    break;
+            }
+            
+            return new Response(btoa(unescape(encodeURIComponent(errorContent))), {
+                status: 200,
+                headers: {
+                    'Content-Type': 'text/plain; charset=utf-8',
+                    'Cache-Control': 'no-store, no-cache'
+                }
+            });
+        }
+        
+        // 7. 更新访问统计并保存
         userData.stats.totalRequests = (userData.stats.totalRequests || 0) + 1;
         userData.stats.lastRequest = Date.now();
+        // 统一保存userData（包含反共享检测的更新和访问统计的更新）
         await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
         
         // 8. 发送Telegram通知
