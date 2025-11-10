@@ -2577,6 +2577,77 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         );
         
         if (!antiShareResult.allowed) {
+            // 检测是否是Clash客户端
+            const isClashClient = /clash|meta|mihomo/i.test(userAgent);
+            
+            let errorMessage = '';
+            
+            switch (antiShareResult.reason) {
+                case 'suspended':
+                    errorMessage = `账号已临时封禁 - ${antiShareResult.suspendReason}`;
+                    break;
+                    
+                case 'device_limit':
+                    errorMessage = `设备数量超限 - 已达${antiShareResult.deviceCount}/${antiShareResult.maxDevices}台设备`;
+                    break;
+                    
+                case 'new_device_new_city':
+                    errorMessage = `新设备新城市 - 可疑共享行为`;
+                    break;
+                    
+                case 'existing_device_new_city':
+                    errorMessage = `城市异常 - 该城市非常用城市`;
+                    break;
+                    
+                case 'rate_limit':
+                    errorMessage = `访问次数超限 - 今日已访问${antiShareResult.dailyCount}/${antiShareResult.rateLimit}次`;
+                    break;
+            }
+            
+            // 🔧 对于Clash客户端，返回包含错误提示节点的配置
+            if (isClashClient) {
+                console.log(`[AntiShare] Clash client detected, returning error proxy config`);
+                
+                const errorYaml = `# ⚠️ 订阅访问受限
+# ${errorMessage}
+# 请联系管理员或等待限制解除
+
+port: 7890
+socks-port: 7891
+allow-lan: false
+mode: Rule
+log-level: info
+
+proxies:
+  - name: "⚠️ ${errorMessage}"
+    type: ss
+    server: 127.0.0.1
+    port: 1
+    cipher: aes-128-gcm
+    password: error
+
+proxy-groups:
+  - name: "🚫 访问受限"
+    type: select
+    proxies:
+      - "⚠️ ${errorMessage}"
+
+rules:
+  - MATCH,🚫 访问受限
+`;
+                
+                return new Response(errorYaml, {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'text/yaml; charset=utf-8',
+                        'Cache-Control': 'no-store, no-cache',
+                        'Profile-Title': '⚠️ 访问受限',
+                        'Subscription-UserInfo': 'upload=0; download=0; total=0; expire=0'
+                    }
+                });
+            }
+            
+            // 对于其他客户端（Shadowrocket/Loon），返回base64编码的错误文本
             let errorContent = '';
             
             switch (antiShareResult.reason) {
