@@ -2147,6 +2147,20 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
             }
             // 未达到城市上限，允许自动扩展（会在后续统计中记录新城市）
             console.log(`[AntiShare] City whitelist expanding: ${city} (${currentCityCount + 1}/${maxCities})`);
+            
+            // 发送城市扩展通知
+            if (config.telegram.NOTIFY_ON_CITY_MISMATCH) {
+                const additionalData = `*Token:* \`${userToken}\`
+*设备ID:* \`${deviceId}\`
+*设备UA:* \`${userAgent}\`
+*新增城市:* \`${city}\`
+*账户已有城市:* \`${allCitiesForDisplay.join(', ')}\`
+*城市数量:* \`${currentCityCount + 1}\`/${maxCities}
+*设备数:* \`${currentDeviceCount}\`
+*IP:* \`${clientIp}\`
+*状态:* ✅ 已加入城市白名单`;
+                context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *新城市已加入*', request, additionalData));
+            }
         }
     }
     
