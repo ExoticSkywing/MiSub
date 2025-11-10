@@ -1693,6 +1693,133 @@ async function generateCombinedNodeList(context, config, userAgent, misubs, prep
 }
 
 // ============================================
+// 订阅格式处理公共函数
+// ============================================
+
+/**
+ * 判断目标订阅格式
+ * @param {URL} url - 请求URL
+ * @param {string} userAgent - User-Agent字符串
+ * @returns {string} - 目标格式（clash/singbox/surge/loon/base64等）
+ */
+function determineTargetFormat(url, userAgent) {
+    let targetFormat = url.searchParams.get('target');
+    
+    if (!targetFormat) {
+        const supportedFormats = ['clash', 'singbox', 'surge', 'loon', 'base64', 'v2ray', 'trojan'];
+        for (const format of supportedFormats) {
+            if (url.searchParams.has(format)) {
+                if (format === 'v2ray' || format === 'trojan') { targetFormat = 'base64'; } else { targetFormat = format; }
+                break;
+            }
+        }
+    }
+    
+    if (!targetFormat) {
+        const ua = userAgent.toLowerCase();
+        const uaMapping = [
+            ['flyclash', 'clash'],
+            ['mihomo', 'clash'],
+            ['clash.meta', 'clash'],
+            ['clash-verge', 'clash'],
+            ['meta', 'clash'],
+            ['stash', 'clash'],
+            ['nekoray', 'clash'],
+            ['sing-box', 'singbox'],
+            ['shadowrocket', 'base64'],
+            ['v2rayn', 'base64'],
+            ['v2rayng', 'base64'],
+            ['surge', 'surge'],
+            ['loon', 'loon'],
+            ['quantumult%20x', 'quanx'],
+            ['quantumult', 'quanx'],
+            ['clash', 'clash']
+        ];
+        
+        for (const [keyword, format] of uaMapping) {
+            if (ua.includes(keyword)) {
+                targetFormat = format;
+                break;
+            }
+        }
+    }
+    
+    return targetFormat || 'base64';
+}
+
+/**
+ * 通过订阅转换器处理订阅内容
+ * @param {string} combinedNodeList - 组合后的节点列表
+ * @param {string} targetFormat - 目标格式
+ * @param {URL} url - 请求URL
+ * @param {string} callbackPath - 回调路径
+ * @param {Object} env - 环境变量
+ * @param {string} effectiveSubConverter - 订阅转换器地址
+ * @param {string} effectiveSubConfig - 订阅配置
+ * @param {string} subName - 订阅名称
+ * @param {Object} additionalHeaders - 额外的响应头
+ * @returns {Promise<Response>} - 响应对象
+ */
+async function processViaSubconverter(combinedNodeList, targetFormat, url, callbackPath, env, effectiveSubConverter, effectiveSubConfig, subName, additionalHeaders = {}) {
+    const base64Content = btoa(unescape(encodeURIComponent(combinedNodeList)));
+    
+    // 生成callback URL
+    const callbackToken = await getCallbackToken(env);
+    const callbackUrl = `${url.protocol}//${url.host}${callbackPath}?target=base64&callback_token=${callbackToken}`;
+    
+    // 如果是订阅转换器的回调请求，直接返回base64内容
+    if (url.searchParams.get('callback_token') === callbackToken) {
+        return new Response(base64Content, {
+            headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Cache-Control': 'no-store, no-cache'
+            }
+        });
+    }
+    
+    // 请求订阅转换器
+    const subconverterUrl = new URL(`https://${effectiveSubConverter}/sub`);
+    subconverterUrl.searchParams.set('target', targetFormat);
+    subconverterUrl.searchParams.set('url', callbackUrl);
+    if ((targetFormat === 'clash' || targetFormat === 'loon' || targetFormat === 'surge') && effectiveSubConfig && effectiveSubConfig.trim() !== '') {
+        subconverterUrl.searchParams.set('config', effectiveSubConfig);
+    }
+    subconverterUrl.searchParams.set('new_name', 'true');
+    
+    try {
+        const subconverterResponse = await fetch(subconverterUrl.toString(), {
+            method: 'GET',
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+        });
+        
+        if (!subconverterResponse.ok) {
+            const errorBody = await subconverterResponse.text();
+            throw new Error(`Subconverter service returned status: ${subconverterResponse.status}. Body: ${errorBody}`);
+        }
+        
+        const responseText = await subconverterResponse.text();
+        const responseHeaders = new Headers(subconverterResponse.headers);
+        responseHeaders.set('Content-Disposition', `attachment; filename*=utf-8''${encodeURIComponent(subName)}`);
+        responseHeaders.set('Content-Type', 'text/plain; charset=utf-8');
+        responseHeaders.set('Cache-Control', 'no-store, no-cache');
+        
+        // 添加额外的响应头
+        for (const [key, value] of Object.entries(additionalHeaders)) {
+            responseHeaders.set(key, value);
+        }
+        
+        return new Response(responseText, {
+            status: subconverterResponse.status,
+            statusText: subconverterResponse.statusText,
+            headers: responseHeaders
+        });
+    } catch (error) {
+        console.error(`[Subconverter Error] ${error.message}`);
+        return new Response(`Error connecting to subconverter: ${error.message}`, { status: 502 });
+    }
+}
+
+// ============================================
 // 反共享机制相关函数
 // ============================================
 
@@ -2333,52 +2460,47 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         console.log(`[UserSub] nodeLinks length: ${nodeLinks?.length || 0}`);
         console.log(`[UserSub] nodeLinks preview: ${nodeLinks?.substring(0, 100)}`);
         
-        // 11. 判断请求格式
-        const formatParam = new URL(request.url).searchParams.get('format')?.toLowerCase();
-        // 使用函数开头定义的userAgent变量
-        const preferClash = userAgent.toLowerCase().includes('clash') || formatParam === 'clash';
+        // 11. 判断目标格式（复用公共函数）
+        const url = new URL(request.url);
+        const targetFormat = determineTargetFormat(url, userAgent);
         
-        let finalContent;
-        let contentType = 'text/plain; charset=utf-8';
-        let filename = `${profile.name || config.FileName}.txt`;
-        
-        if (preferClash || formatParam === 'yaml') {
-            // Clash格式
-            try {
-                const clashConfig = yaml.load(effectiveSubConfig || '{}');
-                clashConfig.proxies = [];
-                
-                // 解析节点链接并转换为Clash格式（这里简化处理，实际需要完整的转换逻辑）
-                const lines = nodeLinks.split('\n').filter(line => line.trim());
-                for (const line of lines) {
-                    // TODO: 完整的节点解析和转换逻辑
-                    // 这里暂时保留原始链接
+        // 12. 如果是base64格式，直接返回
+        if (targetFormat === 'base64') {
+            const base64Content = btoa(unescape(encodeURIComponent(nodeLinks)));
+            return new Response(base64Content, {
+                headers: {
+                    'Content-Type': 'text/plain; charset=utf-8',
+                    'Cache-Control': 'no-store, no-cache',
+                    'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(userData.expiresAt / 1000)}`,
+                    'Profile-Update-Interval': '24',
+                    'Profile-Title': profile.name || config.FileName
                 }
-                
-                finalContent = yaml.dump(clashConfig);
-                contentType = 'text/yaml; charset=utf-8';
-                filename = `${profile.name || config.FileName}.yaml`;
-            } catch (e) {
-                // Clash格式转换失败，回退到Base64编码的原始格式
-                finalContent = btoa(unescape(encodeURIComponent(nodeLinks)));
-                contentType = 'text/plain; charset=utf-8';
-                filename = `${profile.name || config.FileName}.txt`;
-            }
-        } else {
-            // 原始格式 - 需要Base64编码（Shadowrocket等客户端需要）
-            finalContent = btoa(unescape(encodeURIComponent(nodeLinks)));
+            });
         }
         
-        // 12. 返回订阅内容（复用正常订阅的响应头设置）
-        return new Response(finalContent, {
-            headers: {
-                'Content-Type': contentType,
-                'Cache-Control': 'no-store, no-cache',
-                'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(userData.expiresAt / 1000)}`,
-                'Profile-Update-Interval': '24',
-                'Profile-Title': profile.name || config.FileName
-            }
-        });
+        // 13. 其他格式：通过订阅转换器处理（复用公共函数）
+        if (!effectiveSubConverter || effectiveSubConverter.trim() === '') {
+            return new Response('Subconverter backend is not configured.', { status: 500 });
+        }
+        
+        const callbackPath = `/${profileToken}/${profileId}/${userToken}`;
+        const additionalHeaders = {
+            'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(userData.expiresAt / 1000)}`,
+            'Profile-Update-Interval': '24',
+            'Profile-Title': profile.name || config.FileName
+        };
+        
+        return await processViaSubconverter(
+            nodeLinks,
+            targetFormat,
+            url,
+            callbackPath,
+            env,
+            effectiveSubConverter,
+            effectiveSubConfig,
+            profile.name || config.FileName,
+            additionalHeaders
+        );
     } catch (error) {
         // 捕获所有错误并返回详细信息
         console.error(`[UserSub Error] ${error.message}`, error.stack);
@@ -2524,51 +2646,8 @@ async function handleMisubRequest(context) {
         return new Response('Subconverter backend is not configured.', { status: 500 });
     }
     
-    let targetFormat = url.searchParams.get('target');
-    if (!targetFormat) {
-        const supportedFormats = ['clash', 'singbox', 'surge', 'loon', 'base64', 'v2ray', 'trojan'];
-        for (const format of supportedFormats) {
-            if (url.searchParams.has(format)) {
-                if (format === 'v2ray' || format === 'trojan') { targetFormat = 'base64'; } else { targetFormat = format; }
-                break;
-            }
-        }
-    }
-    if (!targetFormat) {
-        const ua = userAgentHeader.toLowerCase();
-        // 使用陣列來保證比對的優先順序
-        const uaMapping = [
-            // Mihomo/Meta 核心的客戶端 - 需要clash格式
-            ['flyclash', 'clash'],
-            ['mihomo', 'clash'],
-            ['clash.meta', 'clash'],
-            ['clash-verge', 'clash'],
-            ['meta', 'clash'],
-            
-            // 其他客戶端
-            ['stash', 'clash'],
-            ['nekoray', 'clash'],
-            ['sing-box', 'singbox'],
-            ['shadowrocket', 'base64'],
-            ['v2rayn', 'base64'],
-            ['v2rayng', 'base64'],
-            ['surge', 'surge'],
-            ['loon', 'loon'],
-            ['quantumult%20x', 'quanx'],
-            ['quantumult', 'quanx'],
-
-            // 最後才匹配通用的 clash，作為向下相容
-            ['clash', 'clash']
-        ];
-
-        for (const [keyword, format] of uaMapping) {
-            if (ua.includes(keyword)) {
-                targetFormat = format;
-                break; // 找到第一個符合的就停止
-            }
-        }
-    }
-    if (!targetFormat) { targetFormat = 'base64'; }
+    // 复用公共函数判断目标格式
+    const targetFormat = determineTargetFormat(url, userAgentHeader);
 
     if (!url.searchParams.has('callback_token')) {
         const clientIp = request.headers.get('CF-Connecting-IP') || 'N/A';
@@ -2620,10 +2699,11 @@ async function handleMisubRequest(context) {
         profileIdentifier ? allProfiles.find(p => (p.customId && p.customId === profileIdentifier) || p.id === profileIdentifier)?.prefixSettings : null
     );
 
+    // 如果是base64格式，直接返回
     if (targetFormat === 'base64') {
         let contentToEncode;
         if (isProfileExpired) {
-            contentToEncode = DEFAULT_EXPIRED_NODE + '\n' + EXPIRED_NOTICE_NODES.join('\n') + '\n'; // Return the expired node and notice nodes for base64 clients
+            contentToEncode = DEFAULT_EXPIRED_NODE + '\n' + EXPIRED_NOTICE_NODES.join('\n') + '\n';
         } else {
             contentToEncode = combinedNodeList;
         }
@@ -2631,44 +2711,18 @@ async function handleMisubRequest(context) {
         return new Response(btoa(unescape(encodeURIComponent(contentToEncode))), { headers });
     }
 
-    const base64Content = btoa(unescape(encodeURIComponent(combinedNodeList)));
-
-    const callbackToken = await getCallbackToken(env);
+    // 其他格式：通过订阅转换器处理（复用公共函数）
     const callbackPath = profileIdentifier ? `/${token}/${profileIdentifier}` : `/${token}`;
-    const callbackUrl = `${url.protocol}//${url.host}${callbackPath}?target=base64&callback_token=${callbackToken}`;
-    if (url.searchParams.get('callback_token') === callbackToken) {
-        const headers = { "Content-Type": "text/plain; charset=utf-8", 'Cache-Control': 'no-store, no-cache' };
-        return new Response(base64Content, { headers });
-    }
-    
-    const subconverterUrl = new URL(`https://${effectiveSubConverter}/sub`);
-    subconverterUrl.searchParams.set('target', targetFormat);
-    subconverterUrl.searchParams.set('url', callbackUrl);
-    if ((targetFormat === 'clash' || targetFormat === 'loon' || targetFormat === 'surge') && effectiveSubConfig && effectiveSubConfig.trim() !== '') {
-        subconverterUrl.searchParams.set('config', effectiveSubConfig);
-    }
-    subconverterUrl.searchParams.set('new_name', 'true');
-    
-    try {
-        const subconverterResponse = await fetch(subconverterUrl.toString(), {
-            method: 'GET',
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-        });
-        if (!subconverterResponse.ok) {
-            const errorBody = await subconverterResponse.text();
-            throw new Error(`Subconverter service returned status: ${subconverterResponse.status}. Body: ${errorBody}`);
-        }
-        const responseText = await subconverterResponse.text();
-        
-        const responseHeaders = new Headers(subconverterResponse.headers);
-        responseHeaders.set("Content-Disposition", `attachment; filename*=utf-8''${encodeURIComponent(subName)}`);
-        responseHeaders.set('Content-Type', 'text/plain; charset=utf-8');
-        responseHeaders.set('Cache-Control', 'no-store, no-cache');
-        return new Response(responseText, { status: subconverterResponse.status, statusText: subconverterResponse.statusText, headers: responseHeaders });
-    } catch (error) {
-        console.error(`[MiSub Final Error] ${error.message}`);
-        return new Response(`Error connecting to subconverter: ${error.message}`, { status: 502 });
-    }
+    return await processViaSubconverter(
+        combinedNodeList,
+        targetFormat,
+        url,
+        callbackPath,
+        env,
+        effectiveSubConverter,
+        effectiveSubConfig,
+        subName
+    );
 }
 
 async function getCallbackToken(env) {
