@@ -1294,7 +1294,9 @@ async function handleApiRequest(request, env) {
                                 totalRequests: 0,
                                 lastRequest: null,
                                 dailyCount: 0,
-                                dailyDate: null
+                                dailyDate: null,
+                                failedAttempts: 0,        // 失败尝试次数（如新设备新城市）
+                                rateLimitAttempts: 0      // 达到上限后的尝试次数
                             }
                         };
                         
@@ -2114,6 +2116,25 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
         userData.devices = {};
     }
     
+    if (!userData.stats) {
+        userData.stats = {
+            totalRequests: 0,
+            lastRequest: null,
+            dailyCount: 0,
+            dailyDate: null,
+            failedAttempts: 0,
+            rateLimitAttempts: 0
+        };
+    }
+    
+    // 确保新字段存在（向后兼容）
+    if (userData.stats.failedAttempts === undefined) {
+        userData.stats.failedAttempts = 0;
+    }
+    if (userData.stats.rateLimitAttempts === undefined) {
+        userData.stats.rateLimitAttempts = 0;
+    }
+    
     // 3.5 【检测0】账号临时封禁检测（优先级最高）
     if (userData.suspend) {
         const now = Date.now();
@@ -2201,6 +2222,50 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
             // 记录失败尝试次数
             userData.stats.failedAttempts = (userData.stats.failedAttempts || 0) + 1;
             
+            // 🔍 立即检查是否需要触发封禁
+            if (config.antiShare.SUSPEND_ENABLED) {
+                const failedAttemptsThreshold = config.antiShare.SUSPEND_FAILED_ATTEMPTS_THRESHOLD || 5;
+                
+                if (userData.stats.failedAttempts >= failedAttemptsThreshold) {
+                    // 触发临时封禁
+                    const suspendDurationMs = config.antiShare.SUSPEND_DURATION_DAYS * 24 * 60 * 60 * 1000;
+                    const suspendUntil = Date.now() + suspendDurationMs;
+                    const suspendReason = `可疑的高频失败尝试（${userData.stats.failedAttempts}次失败尝试，疑似账号共享或滥用）`;
+                    
+                    userData.suspend = {
+                        at: Date.now(),
+                        until: suspendUntil,
+                        reason: suspendReason,
+                        deviceCount: currentDeviceCount,
+                        failedAttempts: userData.stats.failedAttempts
+                    };
+                    
+                    // 发送Telegram封禁通知
+                    const unfreezeDate = new Date(suspendUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                    const additionalData = `*Token:* \`${userToken}\`
+*设备ID:* \`${deviceId}\`
+*城市:* \`${city}\`
+*IP:* \`${clientIp}\`
+*封禁时长:* ${config.antiShare.SUSPEND_DURATION_DAYS}天
+*解封时间:* \`${unfreezeDate}\`
+
+*触发原因:*
+- 失败尝试: \`${userData.stats.failedAttempts}\` 次（阈值: ${failedAttemptsThreshold}次）
+- 已有设备数: \`${currentDeviceCount}\`
+- ⚠️ 疑似账号共享或滥用（如新设备新城市）`;
+                    
+                    context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData));
+                    console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
+                    
+                    return {
+                        allowed: false,
+                        reason: 'suspended',
+                        suspendUntil,
+                        suspendReason
+                    };
+                }
+            }
+            
             return {
                 allowed: false,
                 reason: 'new_device_new_city',
@@ -2278,6 +2343,53 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                     context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *城市异常*', request, additionalData));
                 }
                 
+                // 记录失败尝试次数
+                userData.stats.failedAttempts = (userData.stats.failedAttempts || 0) + 1;
+                
+                // 🔍 立即检查是否需要触发封禁
+                if (config.antiShare.SUSPEND_ENABLED) {
+                    const failedAttemptsThreshold = config.antiShare.SUSPEND_FAILED_ATTEMPTS_THRESHOLD || 5;
+                    
+                    if (userData.stats.failedAttempts >= failedAttemptsThreshold) {
+                        // 触发临时封禁
+                        const suspendDurationMs = config.antiShare.SUSPEND_DURATION_DAYS * 24 * 60 * 60 * 1000;
+                        const suspendUntil = Date.now() + suspendDurationMs;
+                        const suspendReason = `可疑的高频失败尝试（${userData.stats.failedAttempts}次失败尝试，疑似账号共享或滥用）`;
+                        
+                        userData.suspend = {
+                            at: Date.now(),
+                            until: suspendUntil,
+                            reason: suspendReason,
+                            deviceCount: currentDeviceCount,
+                            failedAttempts: userData.stats.failedAttempts
+                        };
+                        
+                        // 发送Telegram封禁通知
+                        const unfreezeDate = new Date(suspendUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+                        const notificationData = `*Token:* \`${userToken}\`
+*设备ID:* \`${deviceId}\`
+*城市:* \`${city}\`
+*IP:* \`${clientIp}\`
+*封禁时长:* ${config.antiShare.SUSPEND_DURATION_DAYS}天
+*解封时间:* \`${unfreezeDate}\`
+
+*触发原因:*
+- 失败尝试: \`${userData.stats.failedAttempts}\` 次（阈值: ${failedAttemptsThreshold}次）
+- 已有设备数: \`${currentDeviceCount}\`
+- ⚠️ 疑似账号共享或滥用（已存在设备访问新城市）`;
+                        
+                        context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, notificationData));
+                        console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
+                        
+                        return {
+                            allowed: false,
+                            reason: 'suspended',
+                            suspendUntil,
+                            suspendReason
+                        };
+                    }
+                }
+                
                 return {
                     allowed: false,
                     reason: 'existing_device_new_city',
@@ -2285,7 +2397,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                     city,
                     existingCities: allCitiesForDisplay,
                     cityCount: currentCityCount,
-                    maxCities
+                    maxCities,
+                    failedAttempts: userData.stats.failedAttempts
                 };
             }
             // 未达到城市上限，允许自动扩展（会在后续统计中记录新城市）
