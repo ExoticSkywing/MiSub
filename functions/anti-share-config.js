@@ -79,10 +79,10 @@ export const CITY_CONFIG = {
 export const GEOIP_CONFIG = {
   // API优先级顺序
   API_PRIORITY: [
-    'ipdata.co',      // 1. ipdata.co（最优先）
+    'ipgeolocation.io',      // 1. ipdata.co（最优先）
     'ipwhois.io',     // 2. ipwhois.io
     'ip-api.com',     // 3. ip-api.com
-    'ipgeolocation.io', // 4. ipgeolocation.io（降级）
+    'ipdata.co', // 4. ipgeolocation.io（降级）
     'cloudflare'      // 5. Cloudflare（最后降级）
   ],
   
