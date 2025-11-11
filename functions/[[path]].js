@@ -328,7 +328,8 @@ async function generateUniqueUserToken(env, length) {
   
   do {
     token = generateRandomToken(length);
-    const exists = await env.MISUB_KV.get(`user:${token}`);
+    const storageAdapter = await getStorageAdapter(env);
+    const exists = await storageAdapter.get(`user:${token}`);
     if (!exists) {
       return token;
     }
@@ -1301,7 +1302,7 @@ async function handleApiRequest(request, env) {
                         };
                         
                         // 存储到KV
-                        await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+                        await storageAdapter.put(`user:${userToken}`, userData);
                         
                         // 构建URL（三段式）
                         const hostname = new URL(request.url).host;
@@ -2102,6 +2103,7 @@ function generateSuspendError(suspendUntil, suspendReason) {
 async function performAntiShareCheck(userToken, userData, request, env, config, settings, context) {
     const userAgent = request.headers.get('User-Agent') || 'Unknown';
     const clientIp = request.headers.get('CF-Connecting-IP') || 'Unknown';
+    const storageAdapter = await getStorageAdapter(env);
     
     // 1. 获取设备ID（hash User-Agent）
     const deviceId = getDeviceId(userAgent);
@@ -2157,7 +2159,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                 userData.suspend.until = newUntil;
                 
                 // 保存更新后的封禁信息
-                await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+                await storageAdapter.put(`user:${userToken}`, userData);
             }
         }
         
@@ -2191,8 +2193,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
             
             delete userData.suspend;
             
-            // 保存解封状态到KV
-            await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+            // 保存解封状态
+            await storageAdapter.put(`user:${userToken}`, userData);
         } else {
             // 封禁仍然有效，拒绝访问
             console.log(`[AntiShare] Account ${userToken} is suspended until ${new Date(userData.suspend.until).toISOString()}`);
@@ -2264,8 +2266,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                 context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData));
                 console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                 
-                // 保存封禁状态到KV
-                await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+                // 保存封禁状态
+                await storageAdapter.put(`user:${userToken}`, userData);
                 
                 return {
                     allowed: false,
@@ -2290,8 +2292,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
             context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *设备数超限*', request, additionalData));
         }
         
-        // 保存failedAttempts到KV
-        await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+        // 保存failedAttempts
+        await storageAdapter.put(`user:${userToken}`, userData);
         
         return {
             allowed: false,
@@ -2389,8 +2391,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                     context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData));
                     console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                     
-                    // 保存封禁状态到KV
-                    await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+                    // 保存封禁状态
+                    await storageAdapter.put(`user:${userToken}`, userData);
                     
                     return {
                         allowed: false,
@@ -2401,8 +2403,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                 }
             }
             
-            // 保存failedAttempts到KV
-            await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+            // 保存failedAttempts
+            await storageAdapter.put(`user:${userToken}`, userData);
             
             return {
                 allowed: false,
@@ -2533,8 +2535,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                         context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, notificationData));
                         console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                         
-                        // 保存封禁状态到KV
-                        await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+                        // 保存封禁状态
+                        await storageAdapter.put(`user:${userToken}`, userData);
                         
                         return {
                             allowed: false,
@@ -2545,8 +2547,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
                     }
                 }
                 
-                // 保存failedAttempts到KV
-                await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+                // 保存failedAttempts
+                await storageAdapter.put(`user:${userToken}`, userData);
                 
                 return {
                     allowed: false,
@@ -2682,8 +2684,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
             
             console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate}`);
             
-            // 保存封禁状态到KV
-            await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+            // 保存封禁状态
+            await storageAdapter.put(`user:${userToken}`, userData);
             
             return {
                 allowed: false,
@@ -2713,8 +2715,8 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
             context.waitUntil(sendEnhancedTgNotification(settings, '⏰ *访问次数超限*', request, additionalData));
         }
         
-        // 保存rateLimitAttempts到KV
-        await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+        // 保存rateLimitAttempts
+        await storageAdapter.put(`user:${userToken}`, userData);
         
         return {
             allowed: false,
@@ -2881,15 +2883,15 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             console.log('[Callback] Subconverter callback request, returning node list directly');
             
             // 加载用户数据
-            const userDataRaw = await env.MISUB_KV.get(`user:${userToken}`);
+            const storageAdapter = await getStorageAdapter(env);
+            const userDataRaw = await storageAdapter.get(`user:${userToken}`);
             if (!userDataRaw) {
                 return new Response('User not found', { status: 404 });
             }
             
-            const userData = JSON.parse(userDataRaw);
+            const userData = typeof userDataRaw === 'string' ? JSON.parse(userDataRaw) : userDataRaw;
             
             // 加载订阅组配置
-            const storageAdapter = await getStorageAdapter(env);
             const allProfiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
             const profile = allProfiles.find(p => 
                 (p.customId && p.customId === profileId) || p.id === profileId
@@ -2967,12 +2969,13 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         }
         
         // 2. 加载用户数据
-        const userDataRaw = await env.MISUB_KV.get(`user:${userToken}`);
+        const storageAdapter = await getStorageAdapter(env);
+        const userDataRaw = await storageAdapter.get(`user:${userToken}`);
         if (!userDataRaw) {
             return new Response('订阅链接无效或已被删除', { status: 404 });
         }
         
-        const userData = JSON.parse(userDataRaw);
+        const userData = typeof userDataRaw === 'string' ? JSON.parse(userDataRaw) : userDataRaw;
         
         // 3. 验证profileId匹配
         if (userData.profileId !== profileId) {
@@ -3008,7 +3011,7 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         }
         
         // 6.3 🔧 加载订阅组配置（用于反共享策略解析）
-        const storageAdapter = await getStorageAdapter(env);
+        // 复用上方的 storageAdapter
         const allProfiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
         const profile = allProfiles.find(p => 
             (p.customId && p.customId === profileId) || p.id === profileId
@@ -3081,7 +3084,7 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
                 console.log(`[AntiShare] Clash client detected, returning error proxy config`);
                 
                 // 保存userData的更改
-                await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+                await storageAdapter.put(`user:${userToken}`, userData);
                 console.log(`[AntiShare] Saved userData after rejection (failedAttempts: ${userData.stats.failedAttempts || 0}, suspended: ${!!userData.suspend})`);
                 
                 return generateErrorConfig('clash', errorMessage);
@@ -3154,7 +3157,7 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             
             // ⚠️ 重要：保存userData的更改（失败计数器、封禁状态等）
             // 即使请求被拒绝，也要保存这些统计信息
-            await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+            await storageAdapter.put(`user:${userToken}`, userData);
             console.log(`[AntiShare] Saved userData after rejection (failedAttempts: ${userData.stats.failedAttempts || 0}, suspended: ${!!userData.suspend})`);
             
             return new Response(btoa(unescape(encodeURIComponent(errorContent))), {
@@ -3249,8 +3252,8 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         if (targetFormat === 'base64') {
             const base64Content = btoa(unescape(encodeURIComponent(nodeLinks)));
             
-            // ✅ 订阅内容已成功生成，保存 KV（包含设备绑定、访问统计等）
-            await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+            // ✅ 订阅内容已成功生成，保存（包含设备绑定、访问统计等）
+            await storageAdapter.put(`user:${userToken}`, userData);
             
             return new Response(base64Content, {
                 headers: {
@@ -3290,8 +3293,8 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         
         // ✅ 只有订阅转换成功（2xx状态），才保存 KV
         if (subconverterResponse.ok) {
-            await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
-            console.log(`[UserSub] ✅ Subscription converted successfully, KV saved for token: ${userToken}`);
+            await storageAdapter.put(`user:${userToken}`, userData);
+            console.log(`[UserSub] ✅ Subscription converted successfully, saved for token: ${userToken}`);
         } else {
             console.warn(`[UserSub] ⚠️ Subscription conversion failed (${subconverterResponse.status}), KV NOT saved to prevent device quota waste`);
         }

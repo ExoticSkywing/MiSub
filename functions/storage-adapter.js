@@ -103,6 +103,12 @@ class D1StorageAdapter {
                     INSERT OR REPLACE INTO ${table} (key, value, updated_at)
                     VALUES (?, ?, CURRENT_TIMESTAMP)
                 `).bind(queryValue, data).run();
+            } else if (table === 'users') {
+                // users 表使用 token-data 结构
+                await this.db.prepare(`
+                    INSERT OR REPLACE INTO ${table} (token, data, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                `).bind(queryValue, data).run();
             } else {
                 // subscriptions 和 profiles 表使用 id-data 结构
                 await this.db.prepare(`
@@ -139,7 +145,8 @@ class D1StorageAdapter {
             const tables = [
                 { name: 'subscriptions', keyField: 'id' },
                 { name: 'profiles', keyField: 'id' },
-                { name: 'settings', keyField: 'key' }
+                { name: 'settings', keyField: 'key' },
+                { name: 'users', keyField: 'token' }
             ];
             const keys = [];
 
@@ -173,6 +180,9 @@ class D1StorageAdapter {
             return { table: 'profiles', queryField: 'id', queryValue: 'main' };
         } else if (key === DATA_KEYS.SETTINGS) {
             return { table: 'settings', queryField: 'key', queryValue: 'main' };
+        } else if (key && key.startsWith('user:')) {
+            const token = key.slice('user:'.length);
+            return { table: 'users', queryField: 'token', queryValue: token };
         } else {
             // 处理其他格式的 key，默认作为 settings 表的 key，但记录警告
             console.warn(`[D1 Storage] Unknown key format: ${key}, treating as settings key`);
@@ -190,6 +200,8 @@ class D1StorageAdapter {
             return DATA_KEYS.PROFILES;
         } else if (table === 'settings' && keyValue === 'main') {
             return DATA_KEYS.SETTINGS;
+        } else if (table === 'users') {
+            return `user:${keyValue}`;
         } else {
             return keyValue;
         }
@@ -280,8 +292,22 @@ export class DataMigrator {
                 subscriptions: false,
                 profiles: false,
                 settings: false,
+                users: false,
                 errors: []
             };
+
+            // 确保 D1 表存在（幂等）
+            try {
+                await d1Adapter.db.prepare(`
+                    CREATE TABLE IF NOT EXISTS users (
+                        token TEXT PRIMARY KEY,
+                        data TEXT NOT NULL,
+                        updated_at INTEGER DEFAULT (unixepoch())
+                    );
+                `).run();
+            } catch (error) {
+                results.errors.push(`创建 users 表失败: ${error.message}`);
+            }
 
             // 迁移订阅数据
             try {
@@ -316,6 +342,21 @@ export class DataMigrator {
                 }
             } catch (error) {
                 results.errors.push(`设置迁移失败: ${error.message}`);
+            }
+
+            // 迁移用户数据：user:*
+            try {
+                const userKeys = await kvAdapter.list('user:');
+                for (const entry of userKeys) {
+                    const key = entry.name;
+                    const data = await kvAdapter.get(key);
+                    if (data) {
+                        await d1Adapter.put(key, data);
+                    }
+                }
+                results.users = true;
+            } catch (error) {
+                results.errors.push(`用户数据迁移失败: ${error.message}`);
             }
 
             return results;
