@@ -345,9 +345,10 @@ async function generateUniqueUserToken(env, length) {
  * @param {string} type - 通知类型
  * @param {Request} request - Cloudflare Workers Request 对象
  * @param {string} additionalData - 额外数据
+ * @param {string} cityFromCaller - 【可选】调用方已获取的城市信息，避免重复调用 GeoIP API
  * @returns {Promise<boolean>} - 是否发送成功
  */
-async function sendEnhancedTgNotification(settings, type, request, additionalData = '') {
+async function sendEnhancedTgNotification(settings, type, request, additionalData = '', cityFromCaller = null) {
   if (!settings.BotToken || !settings.ChatID) {
     return false;
   }
@@ -359,6 +360,14 @@ async function sendEnhancedTgNotification(settings, type, request, additionalDat
     || 'N/A';
   let locationInfo = '';
   let geoSource = 'unknown';
+  
+  // 【复用】如果调用方已经获取了城市信息，直接使用，不重复调用 API
+  if (cityFromCaller) {
+    locationInfo = `
+*城市:* \`${cityFromCaller}\``;
+    geoSource = 'reused from caller';
+  } else {
+    // 只有在没有传入城市信息时才调用 GeoIP API
   
   // 读取配置化的API优先级
   const asyncConfig = getConfig();
@@ -505,6 +514,7 @@ async function sendEnhancedTgNotification(settings, type, request, additionalDat
     locationInfo = '\n*地理信息:* 获取失败';
     geoSource = 'failed';
   }
+  } // 关闭 else 块
   
   // 构建完整消息
   const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
@@ -858,9 +868,11 @@ async function handleApiRequest(request, env) {
                 // 计算唯一城市数量（从所有设备的城市列表中收集，与详情页保持一致）
                 const uniqueCities = new Set();
                 Object.values(userData.devices || {}).forEach(device => {
-                    Object.keys(device.cities || {}).forEach(cityKey => {
-                        uniqueCities.add(cityKey);
-                    });
+                    if (device && device.cities) {
+                        Object.keys(device.cities).forEach(cityKey => {
+                            uniqueCities.add(cityKey);
+                        });
+                    }
                 });
                 
                 return {
@@ -2250,23 +2262,14 @@ function getDeviceId(userAgent) {
 }
 
 /**
- * 从IP获取城市信息
- * @param {string} clientIp - 客户端IP
+ * 从IP获取城市信息（简化版，直接使用 Cloudflare 数据或返回 Unknown）
+ * 注意：完整的地理信息获取在 performAntiShareCheck 中统一处理，避免重复调用 API
  * @param {Request} request - 请求对象
- * @param {Object} config - 配置对象
- * @returns {Promise<Object>} - 城市信息 { city: "Tokyo" }
+ * @returns {string} - 城市名称
  */
-async function getCityFromIP(clientIp, request, config) {
-    // 优先使用Cloudflare的地理信息
-    if (request.cf && request.cf.city) {
-        return { city: request.cf.city };
-    }
-    
-    // 如果CF数据不可用，尝试GeoIP API（复用现有逻辑）
-    // 这里简化处理，实际可以调用GeoIP API
-    // 但为了避免重复调用，优先使用CF数据
-    
-    return { city: 'Unknown' };
+function getCityFromCF(request) {
+    // 快速获取 Cloudflare 提供的城市信息（作为降级方案）
+    return (request.cf && request.cf.city) ? request.cf.city : 'Unknown';
 }
 
 /**
@@ -2470,15 +2473,82 @@ function generateSuspendError(suspendUntil, suspendReason) {
  */
 async function performAntiShareCheck(userToken, userData, request, env, config, settings, context) {
     const userAgent = request.headers.get('User-Agent') || 'Unknown';
-    const clientIp = request.headers.get('CF-Connecting-IP') || 'Unknown';
+    // 使用多层降级获取 IP（与 sendEnhancedTgNotification 保持一致）
+    const clientIp = request.headers.get('CF-Connecting-IP') 
+        || request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim()
+        || request.headers.get('X-Real-IP')
+        || 'Unknown';
     const storageAdapter = await getStorageAdapter(env);
     
     // 1. 获取设备ID（hash User-Agent）
     const deviceId = getDeviceId(userAgent);
     
-    // 2. 获取城市信息
-    const cityInfo = await getCityFromIP(clientIp, request, config);
-    const city = cityInfo?.city || 'Unknown';
+    // 2. 【统一】获取城市信息（只调用一次 GeoIP API，复用结果）
+    // 使用与 Telegram 通知完全相同的逻辑
+    const apiPriority = config.geoip?.API_PRIORITY || ['ipgeolocation.io', 'ipwhois.io', 'ip-api.com', 'cloudflare'];
+    const apiTimeout = config.geoip?.API_TIMEOUT_MS || 3000;
+    let city = 'Unknown';
+    let geoApiUsed = 'none';
+    
+    // API 调用函数映射表（与 sendEnhancedTgNotification 完全一致）
+    const apiHandlers = {
+        'ipgeolocation.io': async () => {
+            if (!settings.IPGeoAPIKey) return null;
+            try {
+                const response = await fetch(
+                    `https://api.ipgeolocation.io/ipgeo?apiKey=${settings.IPGeoAPIKey}&ip=${clientIp}`,
+                    { signal: AbortSignal.timeout(apiTimeout) }
+                );
+                if (!response.ok) return null;
+                const data = await response.json();
+                return data.city || null;
+            } catch { return null; }
+        },
+        'ipwhois.io': async () => {
+            try {
+                const response = await fetch(
+                    `https://ipwhois.app/json/${clientIp}?lang=zh-CN`,
+                    { signal: AbortSignal.timeout(apiTimeout) }
+                );
+                if (!response.ok) return null;
+                const data = await response.json();
+                return (data.success !== false && data.city) ? data.city : null;
+            } catch { return null; }
+        },
+        'ip-api.com': async () => {
+            try {
+                const response = await fetch(
+                    `http://ip-api.com/json/${clientIp}?lang=zh-CN`,
+                    { signal: AbortSignal.timeout(apiTimeout) }
+                );
+                if (!response.ok) return null;
+                const data = await response.json();
+                return (data.status === 'success' && data.city) ? data.city : null;
+            } catch { return null; }
+        },
+        'cloudflare': async () => {
+            return (request.cf && request.cf.city) ? request.cf.city : null;
+        }
+    };
+    
+    // 按优先级尝试各个 API（只调用一次）
+    for (const apiName of apiPriority) {
+        const handler = apiHandlers[apiName];
+        if (!handler) continue;
+        
+        try {
+            const result = await handler();
+            if (result) {
+                city = result;
+                geoApiUsed = apiName;
+                console.log(`[GeoIP] Success: ${geoApiUsed} -> ${city}`);
+                break;
+            }
+        } catch (error) {
+            console.log(`[GeoIP] ${apiName} failed:`, error.message);
+        }
+    }
+    
     const cityKey = city.toLowerCase();
     
     // 3. 初始化数据结构
@@ -2556,7 +2626,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - 达到上限后尝试: \`${oldRateLimitAttempts}\` → \`${userData.stats.rateLimitAttempts}\` 次（阈值: ${rateLimitThreshold}次）
 
 ⚠️ 如继续违规，将更快触发再次封禁。`;
-                context.waitUntil(sendEnhancedTgNotification(settings, '✅ *账号已自动解封*', request, additionalData));
+                context.waitUntil(sendEnhancedTgNotification(settings, '✅ *账号已自动解封*', request, additionalData, city));
             }
             
             delete userData.suspend;
@@ -2631,7 +2701,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - 已有设备数: \`${deviceCount}\`
 - ⚠️ 疑似账号共享或滥用（频繁尝试添加超限设备）`;
                 
-                context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData));
+                context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData, city));
                 console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                 
                 // 保存封禁状态
@@ -2657,7 +2727,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *城市:* \`${city}\`
 *IP:* \`${clientIp}\`
 *失败尝试:* \`${userData.stats.failedAttempts}\` 次（阈值: ${config.antiShare.SUSPEND_FAILED_ATTEMPTS_THRESHOLD || 5}次）`;
-            context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *设备数超限*', request, additionalData));
+            context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *设备数超限*', request, additionalData, city));
         }
         
         // 保存failedAttempts
@@ -2704,7 +2774,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *尝试添加:* 第${deviceCount + 1}台设备
 *IP:* \`${clientIp}\`
 *原因:* 新设备+新城市（可疑共享）`;
-                context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *新设备新城市*', request, additionalData));
+                context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *新设备新城市*', request, additionalData, city));
             }
             
             // 记录失败尝试次数
@@ -2756,7 +2826,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - 已有设备数: \`${deviceCount}\`
 - ⚠️ 疑似账号共享或滥用（如新设备新城市）`;
                     
-                    context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData));
+                    context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData, city));
                     console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                     
                     // 保存封禁状态
@@ -2806,7 +2876,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *当前设备数:* \`${newDeviceCount}\`/${config.antiShare.MAX_DEVICES}
 *IP:* \`${clientIp}\`
 *绑定时间:* \`${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\``;
-            context.waitUntil(sendEnhancedTgNotification(settings, '✅ *新设备绑定成功*', request, additionalData));
+            context.waitUntil(sendEnhancedTgNotification(settings, '✅ *新设备绑定成功*', request, additionalData, city));
         }
     }
     
@@ -2849,7 +2919,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *设备数:* \`${deviceCount}\`
 *IP:* \`${clientIp}\`
 *原因:* 该城市非常用城市（账户已达${maxCities}个城市上限）`;
-                    context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *城市异常*', request, additionalData));
+                    context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *城市异常*', request, additionalData, city));
                 }
                 
                 // 记录失败尝试次数
@@ -2901,7 +2971,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - 已有设备数: \`${deviceCount}\`
 - ⚠️ 疑似账号共享或滥用（已存在设备访问新城市）`;
                         
-                        context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, notificationData));
+                        context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, notificationData, city));
                         console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                         
                         // 保存封禁状态
@@ -2944,7 +3014,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *设备数:* \`${currentDeviceCount}\`
 *IP:* \`${clientIp}\`
 *状态:* ✅ 已加入城市白名单`;
-                context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *新城市已加入*', request, additionalData));
+                context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *新城市已加入*', request, additionalData, city));
             }
         }
     }
@@ -3049,7 +3119,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - ⚠️ 可疑的高频访问行为`;
             }
             
-            context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData));
+            context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData, city));
             
             console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate}`);
             
@@ -3081,7 +3151,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *城市:* \`${city}\`
 *IP:* \`${clientIp}\`
 *重置时间:* 明天0点(UTC+8)`;
-            context.waitUntil(sendEnhancedTgNotification(settings, '⏰ *访问次数超限*', request, additionalData));
+            context.waitUntil(sendEnhancedTgNotification(settings, '⏰ *访问次数超限*', request, additionalData, city));
         }
         
         // 保存rateLimitAttempts
