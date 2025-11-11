@@ -908,7 +908,10 @@ async function handleApiRequest(request, env) {
                     }
                 });
                 
-                const isSuspended = userData.suspend?.status === 'suspended';
+                // 【修复】封禁状态判断：需要检查封禁时间是否过期
+                const isSuspended = userData.suspend?.status === 'suspended' 
+                    && userData.suspend?.until 
+                    && userData.suspend.until > now;  // 只有未过期的封禁才算
                 const isExpired = userData.expiresAt && userData.expiresAt < now;
                 
                 return {
@@ -1009,6 +1012,17 @@ async function handleApiRequest(request, env) {
             
             const userData = typeof userDataRaw === 'string' ? JSON.parse(userDataRaw) : userDataRaw;
             
+            // 【修复】检查封禁是否过期
+            const now = Date.now();
+            let activeSuspend = null;
+            if (userData.suspend?.status === 'suspended' && userData.suspend?.until) {
+                if (userData.suspend.until > now) {
+                    // 封禁仍然有效
+                    activeSuspend = userData.suspend;
+                }
+                // 如果已过期，activeSuspend 保持 null
+            }
+            
             // 加载 profile 信息
             const profiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
             const profile = profiles.find(p => p.id === userData.profileId || p.customId === userData.profileId);
@@ -1064,8 +1078,8 @@ async function handleApiRequest(request, env) {
                     lastFailedAttempt: userData.stats?.lastFailedAttempt
                 },
                 
-                // 封禁信息
-                suspend: userData.suspend || null,
+                // 封禁信息（只返回有效的封禁）
+                suspend: activeSuspend,
                 
                 // 限流信息
                 rateLimit: userData.rateLimit || null,
