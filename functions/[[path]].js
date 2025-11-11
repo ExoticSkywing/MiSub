@@ -838,6 +838,9 @@ async function handleApiRequest(request, env) {
                 params.push(`%${search}%`, `%${search}%`);
             }
             
+            // 记录 WHERE 子句的参数数量（用于 count 查询）
+            const whereParamsCount = params.length;
+            
             if (conditions.length > 0) {
                 query += ' WHERE ' + conditions.join(' AND ');
             }
@@ -932,8 +935,10 @@ async function handleApiRequest(request, env) {
                 if (conditions.length > 0) {
                     countQuery += ' WHERE ' + conditions.join(' AND ');
                 }
+                // 只使用 WHERE 子句的参数（不包括 LIMIT 和 OFFSET）
+                const countParams = params.slice(0, whereParamsCount);
                 const countResult = await env.MISUB_DB.prepare(countQuery)
-                    .bind(...params.slice(0, -2))
+                    .bind(...countParams)
                     .first();
                 total = countResult.total;
             }
