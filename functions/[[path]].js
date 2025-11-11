@@ -2139,6 +2139,28 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
     if (userData.suspend) {
         const now = Date.now();
         
+        // 🔧 策略切换时重新计算封禁时长
+        // 如果当前策略的封禁时长更短，允许提前解封
+        if (userData.suspend.at && userData.suspend.until) {
+            const originalDuration = userData.suspend.until - userData.suspend.at;
+            const currentDuration = (config.antiShare.SUSPEND_DURATION_DAYS || 0) * 86400000;
+            
+            // 如果新策略的封禁时长更短，重新计算 until
+            if (currentDuration < originalDuration) {
+                const newUntil = userData.suspend.at + currentDuration;
+                console.log(`[AntiShare] Policy changed, recalculating suspend duration:`, {
+                    original: `${(originalDuration / 86400000).toFixed(2)} days`,
+                    new: `${(currentDuration / 86400000).toFixed(2)} days`,
+                    oldUntil: new Date(userData.suspend.until).toISOString(),
+                    newUntil: new Date(newUntil).toISOString()
+                });
+                userData.suspend.until = newUntil;
+                
+                // 保存更新后的封禁信息
+                await env.MISUB_KV.put(`user:${userToken}`, JSON.stringify(userData));
+            }
+        }
+        
         // 检查封禁是否已过期
         if (userData.suspend.until && now >= userData.suspend.until) {
             // 封禁已过期，自动解冻
@@ -2999,11 +3021,21 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         // 6.4 🎯 解析该分组和用户的反共享配置（按优先级合并）
         const effectiveAntiShareConfig = resolveAntiShareConfig(profile, userData, asyncConfig);
         console.log(`[AntiShare] Resolved config for profile ${profileId}, user ${userToken}:`, {
-            policyKey: profile.policyKey || '(none)',
+            profileName: profile.name,
+            policyKey: profile.policyKey || '(none - using global default)',
+            hasProfileOverrides: !!profile.antiShareOverrides,
+            hasUserOverrides: !!userData.antiShareOverrides,
             MAX_DEVICES: effectiveAntiShareConfig.MAX_DEVICES,
             MAX_CITIES: effectiveAntiShareConfig.MAX_CITIES,
-            SUSPEND_DURATION_DAYS: effectiveAntiShareConfig.SUSPEND_DURATION_DAYS
+            CITY_CHECK_START_INDEX: effectiveAntiShareConfig.CITY_CHECK_START_INDEX,
+            SUSPEND_DURATION_DAYS: effectiveAntiShareConfig.SUSPEND_DURATION_DAYS,
+            SUSPEND_FAILED_ATTEMPTS_THRESHOLD: effectiveAntiShareConfig.SUSPEND_FAILED_ATTEMPTS_THRESHOLD,
+            RATE_LIMITS: effectiveAntiShareConfig.RATE_LIMITS
         });
+        
+        if (!profile.policyKey && !profile.antiShareOverrides) {
+            console.warn(`[AntiShare] ⚠️ Profile ${profileId} has no policyKey or overrides, using global default config`);
+        }
         
         // 6.5 🛡️ 反共享检测（使用分组和用户的有效配置）
         const antiShareResult = await performAntiShareCheck(

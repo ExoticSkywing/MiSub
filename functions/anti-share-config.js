@@ -58,7 +58,7 @@ export const ANTI_SHARE_PRESETS = {
   family: {
     MAX_DEVICES: 4,
     MAX_CITIES: 3,
-    CITY_CHECK_START_INDEX: 1,
+    CITY_CHECK_START_INDEX: 2,
     RATE_LIMIT_ENABLED: true,
     RATE_LIMITS: {
       1: 50,
