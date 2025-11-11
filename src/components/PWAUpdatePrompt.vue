@@ -1,66 +1,44 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref } from 'vue';
+import { useRegisterSW } from 'virtual:pwa-register/vue';
 import { useToastStore } from '../stores/toast.js';
 
 const { showToast } = useToastStore();
-const updateAvailable = ref(false);
-const registration = ref(null);
+
+const {
+  needRefresh,
+  updateServiceWorker,
+} = useRegisterSW({
+  onRegistered(registration) {
+    console.log('PWA: Service Worker 已注册');
+  },
+  onRegisterError(error) {
+    console.error('PWA: Service Worker 注册失败', error);
+  },
+  onNeedRefresh() {
+    console.log('PWA: 发现新版本');
+    showToast('发现新版本，点击更新按钮获取最新功能', 'info', 8000);
+  },
+});
 
 const handleUpdate = async () => {
-  if (registration.value && registration.value.waiting) {
-    // 告诉 service worker 跳过等待并激活新版本
-    registration.value.waiting.postMessage({ type: 'SKIP_WAITING' });
-    
-    // 监听控制权变更
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      // 重新加载页面
-      window.location.reload();
-    });
+  try {
+    await updateServiceWorker(true);
+  } catch (error) {
+    console.error('更新失败:', error);
+    showToast('更新失败，请刷新页面重试', 'error');
   }
 };
 
 const dismissUpdate = () => {
-  updateAvailable.value = false;
+  needRefresh.value = false;
 };
-
-onMounted(() => {
-  // 检查是否支持 Service Worker
-  if ('serviceWorker' in navigator) {
-    // 监听 PWA 更新事件
-    navigator.serviceWorker.addEventListener('message', (event) => {
-      if (event.data && event.data.type === 'SW_UPDATE_AVAILABLE') {
-        updateAvailable.value = true;
-        showToast('发现新版本，点击更新按钮获取最新功能', 'info', 8000);
-      }
-    });
-    
-    // 获取当前注册的 service worker
-    navigator.serviceWorker.getRegistration().then((reg) => {
-      if (reg) {
-        registration.value = reg;
-        
-        // 监听新的 service worker 安装
-        reg.addEventListener('updatefound', () => {
-          const newWorker = reg.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                updateAvailable.value = true;
-                showToast('发现新版本，点击更新按钮获取最新功能', 'info', 8000);
-              }
-            });
-          }
-        });
-      }
-    });
-  }
-});
 </script>
 
 <template>
   <Transition name="update-banner">
     <div
-      v-if="updateAvailable"
+      v-if="needRefresh"
       class="fixed bottom-4 left-4 right-4 z-50 mx-auto max-w-md sm:left-auto sm:max-w-sm"
     >
       <div class="bg-gradient-to-r from-indigo-500 to-purple-600 backdrop-blur-lg border border-white/20 rounded-xl shadow-2xl overflow-hidden">
