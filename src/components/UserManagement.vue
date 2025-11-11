@@ -114,18 +114,24 @@
                 <span v-if="user.customId" class="ml-2 text-xs text-gray-500 dark:text-gray-400">({{ user.customId }})</span>
               </td>
               <td class="px-4 py-3">
-                <span v-if="user.isSuspended" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-                  已封禁
-                </span>
-                <span v-else-if="user.isExpired" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-                  已过期
-                </span>
-                <span v-else-if="user.status === 'activated'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                  已激活
-                </span>
-                <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                  待激活
-                </span>
+                <div class="flex flex-wrap gap-1">
+                  <!-- 已封禁状态 -->
+                  <span v-if="user.isSuspended" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                    已封禁
+                  </span>
+                  <!-- 已过期状态 -->
+                  <span v-if="user.isExpired" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                    已过期
+                  </span>
+                  <!-- 激活状态（只在没有封禁和过期时显示）-->
+                  <span v-if="!user.isSuspended && !user.isExpired && user.status === 'activated'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                    已激活
+                  </span>
+                  <!-- 待激活状态（只在没有封禁和过期时显示）-->
+                  <span v-if="!user.isSuspended && !user.isExpired && user.status !== 'activated'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                    待激活
+                  </span>
+                </div>
               </td>
               <td class="px-4 py-3">
                 <span class="text-sm" :class="user.deviceCount >= user.deviceLimit ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-600 dark:text-gray-400'">
@@ -190,18 +196,24 @@
                 <span v-if="user.customId" class="text-xs">({{ user.customId }})</span>
               </div>
             </div>
-            <span v-if="user.isSuspended" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
-              已封禁
-            </span>
-            <span v-else-if="user.isExpired" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
-              已过期
-            </span>
-            <span v-else-if="user.status === 'activated'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-              已激活
-            </span>
-            <span v-else class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-              待激活
-            </span>
+            <div class="flex flex-wrap gap-1">
+              <!-- 已封禁状态 -->
+              <span v-if="user.isSuspended" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                已封禁
+              </span>
+              <!-- 已过期状态 -->
+              <span v-if="user.isExpired" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+                已过期
+              </span>
+              <!-- 激活状态（只在没有封禁和过期时显示）-->
+              <span v-if="!user.isSuspended && !user.isExpired && user.status === 'activated'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                已激活
+              </span>
+              <!-- 待激活状态（只在没有封禁和过期时显示）-->
+              <span v-if="!user.isSuspended && !user.isExpired && user.status !== 'activated'" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                待激活
+              </span>
+            </div>
           </div>
           
           <div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
