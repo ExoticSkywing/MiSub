@@ -851,6 +851,14 @@ async function handleApiRequest(request, env) {
                 const profile = profileMap.get(userData.profileId);
                 const effectiveAntiShareConfig = resolveAntiShareConfig(profile, userData, asyncConfig);
                 
+                // 计算唯一城市数量（从所有设备的城市列表中收集）
+                const uniqueCities = new Set();
+                Object.values(userData.devices || {}).forEach(device => {
+                    Object.keys(device.cities || {}).forEach(cityKey => {
+                        uniqueCities.add(cityKey);
+                    });
+                });
+                
                 return {
                     token: row.token,
                     profileId: userData.profileId,
@@ -859,7 +867,7 @@ async function handleApiRequest(request, env) {
                     status: userData.status,
                     deviceCount: Object.keys(userData.devices || {}).length,
                     deviceLimit: effectiveAntiShareConfig.MAX_DEVICES,
-                    cityCount: Object.keys(userData.cities || {}).length,
+                    cityCount: uniqueCities.size,
                     cityLimit: effectiveAntiShareConfig.MAX_CITIES,
                     activatedAt: userData.activatedAt,
                     expiresAt: userData.expiresAt,
