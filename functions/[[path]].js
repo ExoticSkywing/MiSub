@@ -845,9 +845,11 @@ async function handleApiRequest(request, env) {
             });
             
             // 组装数据
+            const asyncConfig = getConfig();
             const users = result.results.map(row => {
                 const userData = JSON.parse(row.data);
                 const profile = profileMap.get(userData.profileId);
+                const effectiveAntiShareConfig = resolveAntiShareConfig(profile, userData, asyncConfig);
                 
                 return {
                     token: row.token,
@@ -856,7 +858,9 @@ async function handleApiRequest(request, env) {
                     customId: profile?.customId || '',
                     status: userData.status,
                     deviceCount: Object.keys(userData.devices || {}).length,
+                    deviceLimit: effectiveAntiShareConfig.MAX_DEVICES,
                     cityCount: Object.keys(userData.cities || {}).length,
+                    cityLimit: effectiveAntiShareConfig.MAX_CITIES,
                     activatedAt: userData.activatedAt,
                     expiresAt: userData.expiresAt,
                     createdAt: row.created_at,

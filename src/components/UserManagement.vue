@@ -88,7 +88,8 @@
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Token</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">订阅组</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">状态</th>
-              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">设备/城市</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">设备</th>
+              <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">城市</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">激活时间</th>
               <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">到期时间</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">操作</th>
@@ -122,8 +123,13 @@
                 </span>
               </td>
               <td class="px-4 py-3">
-                <span class="text-sm text-gray-600 dark:text-gray-400">
-                  {{ user.deviceCount }} / {{ user.cityCount }}
+                <span class="text-sm" :class="user.deviceCount >= user.deviceLimit ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-600 dark:text-gray-400'">
+                  {{ user.deviceCount }} / {{ user.deviceLimit }}
+                </span>
+              </td>
+              <td class="px-4 py-3">
+                <span class="text-sm" :class="user.cityCount >= user.cityLimit ? 'text-red-600 dark:text-red-400 font-medium' : 'text-gray-600 dark:text-gray-400'">
+                  {{ user.cityCount }} / {{ user.cityLimit }}
                 </span>
               </td>
               <td class="px-4 py-3">
@@ -191,7 +197,8 @@
           </div>
           
           <div class="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-            <div>设备/城市: {{ user.deviceCount }} / {{ user.cityCount }}</div>
+            <div>设备: {{ user.deviceCount }} / {{ user.deviceLimit }}</div>
+            <div>城市: {{ user.cityCount }} / {{ user.cityLimit }}</div>
             <div>激活: {{ formatDate(user.activatedAt) }}</div>
             <div :class="isExpired(user.expiresAt) ? 'text-red-600 dark:text-red-400 font-medium' : ''">
               到期: {{ formatDate(user.expiresAt) }}
