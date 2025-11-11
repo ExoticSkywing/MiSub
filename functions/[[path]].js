@@ -941,18 +941,34 @@ async function handleApiRequest(request, env) {
                 // 设备信息
                 devices: Object.entries(userData.devices || {}).map(([id, device]) => ({
                     id,
-                    name: device.name || 'Unknown',
+                    name: device.name || device.userAgent || 'Unknown',
                     lastSeen: device.lastSeen,
-                    activatedAt: device.activatedAt
+                    activatedAt: device.firstSeen
                 })),
                 
-                // 城市信息
-                cities: Object.entries(userData.cities || {}).map(([id, city]) => ({
-                    id,
-                    name: city.name || 'Unknown',
-                    lastSeen: city.lastSeen,
-                    activatedAt: city.activatedAt
-                })),
+                // 城市信息（从所有设备的城市列表中收集）
+                cities: (() => {
+                    const citiesMap = new Map();
+                    Object.values(userData.devices || {}).forEach(device => {
+                        Object.entries(device.cities || {}).forEach(([cityKey, cityData]) => {
+                            if (!citiesMap.has(cityKey)) {
+                                citiesMap.set(cityKey, {
+                                    id: cityKey,
+                                    name: cityData.city || 'Unknown',
+                                    firstSeen: cityData.firstSeen,
+                                    lastSeen: cityData.lastSeen
+                                });
+                            } else {
+                                // 如果多个设备访问同一城市，更新最后访问时间
+                                const existing = citiesMap.get(cityKey);
+                                if (cityData.lastSeen > existing.lastSeen) {
+                                    existing.lastSeen = cityData.lastSeen;
+                                }
+                            }
+                        });
+                    });
+                    return Array.from(citiesMap.values());
+                })(),
                 
                 // 统计信息
                 stats: {
@@ -2759,6 +2775,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
     if (isNewDevice) {
         userData.devices[deviceId] = {
             deviceId,
+            name: userAgent,  // 直接使用完整的 User-Agent 作为设备名称
             userAgent,
             firstSeen: Date.now(),
             lastSeen: Date.now(),
@@ -3069,6 +3086,9 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
     
     // ✅ 通过所有检测
     // 更新设备统计
+    if (!device.name) {
+        device.name = userAgent;  // 兼容旧设备，补充 name 字段
+    }
     device.lastSeen = Date.now();
     device.requestCount++;
     
@@ -3076,6 +3096,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
     if (!device.cities[cityKey]) {
         device.cities[cityKey] = {
             city,
+            name: city,  // 城市名称
             firstSeen: Date.now(),
             lastSeen: Date.now(),
             count: 0
