@@ -3498,8 +3498,16 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         
         const userData = typeof userDataRaw === 'string' ? JSON.parse(userDataRaw) : userDataRaw;
         
-        // 3. 验证profileId匹配
-        if (userData.profileId !== profileId) {
+        // 3. 验证profileId匹配（支持 id 和 customId）
+        // 加载所有 profiles 以获取 customId 信息
+        const allProfilesForMatch = await storageAdapter.get(KV_KEY_PROFILES) || [];
+        const targetProfile = allProfilesForMatch.find(p => p.id === userData.profileId);
+        
+        // 检查 URL 中的 profileId 是否匹配用户数据中的 profile.id 或其 customId
+        const profileIdMatches = profileId === userData.profileId || 
+                                (targetProfile && profileId === targetProfile.customId);
+        
+        if (!profileIdMatches) {
             return new Response('订阅组不匹配', { status: 403 });
         }
         
@@ -3532,9 +3540,8 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         }
         
         // 6.3 🔧 加载订阅组配置（用于反共享策略解析）
-        // 复用上方的 storageAdapter
-        const allProfiles = await storageAdapter.get(KV_KEY_PROFILES) || [];
-        const profile = allProfiles.find(p => 
+        // 复用上方已加载的 allProfilesForMatch
+        const profile = allProfilesForMatch.find(p => 
             (p.customId && p.customId === profileId) || p.id === profileId
         );
         
