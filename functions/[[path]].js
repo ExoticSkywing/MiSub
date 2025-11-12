@@ -2473,6 +2473,22 @@ function generateNewDeviceNewCityError() {
 }
 
 /**
+ * 生成城市上限超出错误节点
+ * @param {number} currentCityCount - 当前城市数
+ * @param {number} maxCities - 最大城市数
+ * @returns {string} - Base64编码的错误节点
+ */
+function generateCityLimitError(currentCityCount, maxCities) {
+    const errorNodes = [
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🌍 城市上限')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`当前: ${currentCityCount}个 / 限制: ${maxCities}个`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ 账户已达城市上限')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('请使用已有城市或联系服务商')}`
+    ];
+    return errorNodes.join('\n');
+}
+
+/**
  * 生成已存在设备+新城市错误节点
  * @param {string} deviceId - 设备ID
  * @param {Array<string>} existingCities - 已存在的城市列表
@@ -3661,6 +3677,10 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
                     errorMessage = `新设备新城市 - 可疑共享行为`;
                     break;
                     
+                case 'city_limit_exceeded':
+                    errorMessage = `城市上限 - 账户已达${antiShareResult.currentCityCount}/${antiShareResult.maxCities}个城市`;
+                    break;
+                    
                 case 'existing_device_new_city':
                     errorMessage = `城市异常 - 该城市非常用城市`;
                     break;
@@ -3725,6 +3745,13 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
                     
                 case 'new_device_new_city':
                     errorContent = generateNewDeviceNewCityError();
+                    break;
+                    
+                case 'city_limit_exceeded':
+                    errorContent = generateCityLimitError(
+                        antiShareResult.currentCityCount,
+                        antiShareResult.maxCities
+                    );
                     break;
                     
                 case 'existing_device_new_city':
