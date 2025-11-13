@@ -3591,6 +3591,42 @@ function getBrowserBlockedResponse() {
 async function handleUserSubscription(userToken, profileId, profileToken, request, env, config, context) {
     try {
         const url = new URL(request.url);
+        const adminKey = url.searchParams.get('admin_key');
+        
+        // 【安全检查】userToken 必须存在，或者提供有效的管理员 Key
+        if (!userToken) {
+            // 检查是否提供了管理员 Key
+            if (!adminKey) {
+                console.warn('[Security] Attempted access without userToken or admin_key');
+                // 返回错误节点而不是 403，防止客户端使用缓存
+                const errorNode = `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('订阅链接异常')}`;
+                const errorContent = [errorNode].join('\n');
+                return new Response(btoa(unescape(encodeURIComponent(errorContent))), {
+                    headers: {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                        'Cache-Control': 'no-store, no-cache'
+                    }
+                });
+            }
+            
+            // 验证管理员 Key
+            const storageAdapter = await getStorageAdapter(env);
+            const settings = await storageAdapter.get(KV_KEY_SETTINGS) || {};
+            if (!settings.adminKey || adminKey !== settings.adminKey) {
+                console.warn('[Security] Invalid admin_key provided');
+                // 返回错误节点而不是 403，防止客户端使用缓存
+                const errorNode = `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('订阅链接异常')}`;
+                const errorContent = [errorNode].join('\n');
+                return new Response(btoa(unescape(encodeURIComponent(errorContent))), {
+                    headers: {
+                        'Content-Type': 'text/plain; charset=utf-8',
+                        'Cache-Control': 'no-store, no-cache'
+                    }
+                });
+            }
+            
+            console.log('[Admin] Admin access granted for profile: ' + profileId);
+        }
         
         // 【优先级0】订阅转换器回调请求处理（必须在所有检测之前）
         const callbackToken = await getCallbackToken(env);

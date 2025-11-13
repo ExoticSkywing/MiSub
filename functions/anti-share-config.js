@@ -73,22 +73,22 @@ export const ANTI_SHARE_PRESETS = {
     SUSPEND_FAILED_ATTEMPTS_THRESHOLD: 5
   },
   
-  // 专业套餐：宽松限制
+  // 精英独家专享版：宽松限制
   pro: {
     MAX_DEVICES: 4,
-    MAX_CITIES: 5,
-    CITY_CHECK_START_INDEX: 3,
+    MAX_CITIES: 10,
+    CITY_CHECK_START_INDEX: 2,
     RATE_LIMIT_ENABLED: true,
     RATE_LIMITS: {
-      1: 5,
-      2: 10,
-      3: 15,
-      4: 20
+      1: 3,
+      2: 5,
+      3: 7,
+      4: 9
     },
     SUSPEND_ENABLED: true,
     SUSPEND_REQUIRE_MAX_DEVICES: false,
-    SUSPEND_DURATION_DAYS: 1,
-    SUSPEND_RATE_LIMIT_ATTEMPTS_THRESHOLD: 6,
+    SUSPEND_DURATION_DAYS: 3,
+    SUSPEND_RATE_LIMIT_ATTEMPTS_THRESHOLD: 8,
     SUSPEND_FAILED_ATTEMPTS_THRESHOLD: 5
   },
   
