@@ -893,6 +893,11 @@ async function handleApiRequest(request, env) {
             // 组装数据
             const asyncConfig = getConfig();
             const now = Date.now();
+            
+            // 获取全局的 profileToken（订阅组分享Token）
+            const settings = await storageAdapter.get(KV_KEY_SETTINGS) || {};
+            const globalProfileToken = settings.profileToken;
+            
             let users = result.results.map(row => {
                 const userData = JSON.parse(row.data);
                 const profile = profileMap.get(userData.profileId);
@@ -913,8 +918,11 @@ async function handleApiRequest(request, env) {
                 const isExpired = userData.expiresAt && userData.expiresAt < now;
                 
                 // 生成订阅链接
+                // 使用全局的 profileToken（订阅组分享Token），profileId 可以是 customId 或真实 id
                 const profileIdForUrl = profile?.customId || userData.profileId;
-                const subscriptionUrl = `${new URL(request.url).origin}/${profile?.token}/${profileIdForUrl}/${row.token}`;
+                const subscriptionUrl = globalProfileToken 
+                    ? `${new URL(request.url).origin}/${globalProfileToken}/${profileIdForUrl}/${row.token}`
+                    : null;
                 
                 return {
                     token: row.token,
