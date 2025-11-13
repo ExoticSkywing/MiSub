@@ -226,6 +226,7 @@ const defaultSettings = {
   FileName: 'MiSub',
   mytoken: 'auto',
   profileToken: 'profiles',
+  adminKey: '', // 管理员密钥，用于访问二段式订阅链接
   subConverter: 'url.v1.mk',
   subConfig: 'https://raw.githubusercontent.com/cmliu/ACL4SSR/refs/heads/main/Clash/config/ACL4SSR_Online_Full.ini',
   prependSubName: true, // 保持向后兼容
@@ -4178,16 +4179,21 @@ async function handleMisubRequest(context) {
     if (profileIdentifier) {
 
         // [修正] 使用 config 變量
-        // 【安全检查】二段式 URL 需要有效的管理员 Key
+        // 【安全检查】二段式 URL 只允许：1) 有效的管理员 Key 2) 有效的 callback_token（subconverter 回调）
         const adminKey = url.searchParams.get('admin_key');
-        const hasValidToken = token && token === config.profileToken;
-        const hasValidAdminKey = adminKey && adminKey === config.adminKey;
+        const callbackToken = url.searchParams.get('callback_token');
+        const validCallbackToken = await getCallbackToken(env);
         
-        if (!hasValidToken && !hasValidAdminKey) {
+        const hasValidAdminKey = adminKey && adminKey === config.adminKey;
+        const hasValidCallbackToken = callbackToken === validCallbackToken;
+        
+        console.log(`[Security] Two-segment URL check: profileIdentifier=${profileIdentifier}, hasValidAdminKey=${hasValidAdminKey}, hasValidCallbackToken=${hasValidCallbackToken}`);
+        
+        if (!hasValidAdminKey && !hasValidCallbackToken) {
             // 返回错误节点而不是 403，防止客户端使用缓存
             const errorNode = `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('订阅链接异常')}`;
             const errorContent = [errorNode].join('\n');
-            console.warn('[Security] Attempted access to profile without valid token or admin_key');
+            console.warn('[Security] Attempted access to profile without valid admin_key or callback_token');
             return new Response(btoa(unescape(encodeURIComponent(errorContent))), {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
