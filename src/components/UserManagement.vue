@@ -345,16 +345,25 @@
       :token="selectedUser"
       @close="selectedUser = null"
     />
+
+    <!-- 设置弹窗 -->
+    <SettingsModal 
+      v-model:show="uiStore.isSettingsModalVisible"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue';
+import { ref, onMounted, watch, computed, defineAsyncComponent } from 'vue';
 import { fetchUsers as apiFetchUsers, unsuspendUser as apiUnsuspendUser, deleteUser as apiDeleteUser, batchDeleteUsers as apiBatchDeleteUsers } from '../lib/api.js';
 import { useToastStore } from '../stores/toast.js';
+import { useUIStore } from '../stores/ui.js';
 import UserDetailModal from './UserDetailModal.vue';
 
+const SettingsModal = defineAsyncComponent(() => import('./SettingsModal.vue'));
+
 const { showToast } = useToastStore();
+const uiStore = useUIStore();
 
 const users = ref([]);
 const profiles = ref([]);

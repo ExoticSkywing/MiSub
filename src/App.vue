@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { useThemeStore } from './stores/theme';
 import { useSessionStore } from './stores/session';
 import { useToastStore } from './stores/toast';
@@ -34,9 +34,12 @@ const currentPage = ref('dashboard'); // 'dashboard' or 'users'
 
 function switchPage(page) {
   currentPage.value = page;
-  // 重置所有 UI 状态，防止弹窗在页面切换时保持打开状态
-  uiStore.hide();
 }
+
+// 监听页面变化，在切换时关闭所有弹窗
+watch(() => currentPage.value, () => {
+  uiStore.hide();
+});
 
 onMounted(() => {
   initTheme();
