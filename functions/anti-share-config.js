@@ -115,7 +115,7 @@ export const ANTI_SHARE_PRESETS = {
 export const BATCH_GENERATE_CONFIG = {
   MAX_TOKENS_PER_BATCH: 100,        // 单次最多生成数量
   MIN_TOKENS_PER_BATCH: 1,          // 单次最少生成数量
-  TOKEN_LENGTH: 4,                  // Token长度
+  TOKEN_LENGTH: 16,                  // Token长度
   TOKEN_CHARSET: 'abcdefghijklmnopqrstuvwxyz0123456789',  // Token字符集
   
   // 默认有效期（天）
