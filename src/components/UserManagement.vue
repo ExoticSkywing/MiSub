@@ -344,7 +344,6 @@
       v-if="selectedUser"
       :token="selectedUser"
       @close="selectedUser = null"
-      @updated="loadUsers"
     />
   </div>
 </template>

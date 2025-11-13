@@ -915,7 +915,16 @@ async function handleApiRequest(request, env) {
                 
                 // 【修复】封禁状态判断：suspend 对象没有 status 字段，只需检查 until
                 const isSuspended = userData.suspend?.until && userData.suspend.until > now;
-                const isExpired = userData.expiresAt && userData.expiresAt < now;
+                
+                // 【调试】检查 expiresAt 的值和类型
+                let isExpired = false;
+                if (userData.expiresAt) {
+                    const expiresAtTime = typeof userData.expiresAt === 'string' 
+                        ? new Date(userData.expiresAt).getTime() 
+                        : userData.expiresAt;
+                    isExpired = expiresAtTime < now;
+                    console.log(`[DEBUG] Token: ${row.token}, expiresAt: ${userData.expiresAt}, expiresAtTime: ${expiresAtTime}, now: ${now}, isExpired: ${isExpired}`);
+                }
                 
                 // 生成订阅链接
                 // 使用全局的 profileToken（订阅组分享Token），profileId 可以是 customId 或真实 id
@@ -3707,7 +3716,18 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         }
         
         // 6. 检查是否过期
-        if (userData.expiresAt && Date.now() > userData.expiresAt) {
+        const now = Date.now();
+        let expiresAtTime = userData.expiresAt;
+        
+        // 处理 expiresAt 的格式（可能是字符串或时间戳）
+        if (typeof userData.expiresAt === 'string') {
+            expiresAtTime = new Date(userData.expiresAt).getTime();
+        }
+        
+        console.log(`[UserSub] Expiry check - userToken: ${userToken}, expiresAt: ${userData.expiresAt}, expiresAtTime: ${expiresAtTime}, now: ${now}, isExpired: ${expiresAtTime && now > expiresAtTime}`);
+        
+        if (expiresAtTime && now > expiresAtTime) {
+            console.log(`[UserSub] User ${userToken} subscription expired!`);
             const expiredNode = `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('订阅已过期')}`;
             const noticeNodes = [
                 `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('请续费或联系服务商')}`,
@@ -3719,7 +3739,7 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                     'Cache-Control': 'no-store, no-cache',
-                    'Subscription-UserInfo': `upload=0; download=0; total=0; expire=${Math.floor(userData.expiresAt / 1000)}`
+                    'Subscription-UserInfo': `upload=0; download=0; total=0; expire=${Math.floor(expiresAtTime / 1000)}`
                 }
             });
         }
