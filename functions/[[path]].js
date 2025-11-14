@@ -3572,6 +3572,10 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
     };
 }
 
+const proxyClientKeywords = ['shadowrocket', 'quantumult', 'surge', 'loon', 'clash', 'stash', 'pharos', 
+                             'v2rayn', 'v2rayng', 'kitsunebi', 'i2ray', 'pepi', 'potatso', 'netch',
+                             'qv2ray', 'mellow', 'trojan', 'shadowsocks', 'surfboard', 'sing-box', 'singbox', 'nekobox'];
+
 /**
  * 检测是否为浏览器访问
  * @param {string} userAgent - User-Agent字符串
@@ -3579,13 +3583,15 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
  */
 function isBrowserAccess(userAgent) {
     const browserKeywords = ['mozilla', 'chrome', 'safari', 'firefox', 'edge', 'opera', 'msie', 'trident'];
-    const proxyClientKeywords = ['shadowrocket', 'quantumult', 'surge', 'loon', 'clash', 'stash', 'pharos', 
-                                 'v2rayn', 'v2rayng', 'kitsunebi', 'i2ray', 'pepi', 'potatso', 'netch',
-                                 'qv2ray', 'mellow', 'trojan', 'shadowsocks', 'surfboard'];
     
     const lowerUA = userAgent.toLowerCase();
     return browserKeywords.some(keyword => lowerUA.includes(keyword)) &&
            !proxyClientKeywords.some(keyword => lowerUA.includes(keyword));
+}
+
+function isSupportedProxyClient(userAgent) {
+    const lowerUA = userAgent.toLowerCase();
+    return proxyClientKeywords.some(keyword => lowerUA.includes(keyword));
 }
 
 /**
@@ -3870,6 +3876,19 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             return new Response('Access Denied: Bot requests are not allowed', { 
                 status: 403,
                 headers: { 'Content-Type': 'text/plain' }
+            });
+        }
+        
+        // 0.4 🎯 仅允许已知代理客户端访问（拦截脚本/未知 UA）
+        if (!isBrowserAccess(userAgent) && !isSupportedProxyClient(userAgent)) {
+            console.warn(`[Security] Blocked non-proxy client UA: ${userAgent}`);
+            const errorNode = `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('订阅链接异常')}`;
+            const errorContent = [errorNode].join('\n');
+            return new Response(btoa(unescape(encodeURIComponent(errorContent))), {
+                headers: {
+                    'Content-Type': 'text/plain; charset=utf-8',
+                    'Cache-Control': 'no-store, no-cache'
+                }
             });
         }
         
