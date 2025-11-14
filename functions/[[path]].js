@@ -4068,11 +4068,17 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             // ✅ 订阅内容已成功生成，保存（包含设备绑定、访问统计等）
             await storageAdapter.put(`user:${userToken}`, userData);
             
+            // 【修复】处理 expiresAt 格式（可能是字符串或时间戳）
+            let expiresAtTimestamp = userData.expiresAt;
+            if (typeof userData.expiresAt === 'string') {
+                expiresAtTimestamp = new Date(userData.expiresAt).getTime();
+            }
+            
             return new Response(base64Content, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                     'Cache-Control': 'no-store, no-cache',
-                    'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(userData.expiresAt / 1000)}`,
+                    'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(expiresAtTimestamp / 1000)}`,
                     'Profile-Update-Interval': '24',
                     'Profile-Title': profile.name || config.FileName
                 }
@@ -4085,8 +4091,15 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         }
         
         const callbackPath = `/${profileToken}/${profileId}/${userToken}`;
+        
+        // 【修复】处理 expiresAt 格式（可能是字符串或时间戳）
+        let expiresAtTimestamp = userData.expiresAt;
+        if (typeof userData.expiresAt === 'string') {
+            expiresAtTimestamp = new Date(userData.expiresAt).getTime();
+        }
+        
         const additionalHeaders = {
-            'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(userData.expiresAt / 1000)}`,
+            'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(expiresAtTimestamp / 1000)}`,
             'Profile-Update-Interval': '24',
             'Profile-Title': profile.name || config.FileName
         };
