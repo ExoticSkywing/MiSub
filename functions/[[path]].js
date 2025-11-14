@@ -3600,69 +3600,137 @@ function getBrowserBlockedResponse() {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>订阅链接</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #f5f5f7;
+            color: #1d1d1f;
+            line-height: 1.6;
         }
+        
         .container {
-            background: white;
-            padding: 2rem;
-            border-radius: 1rem;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 60px 20px;
             text-align: center;
-            max-width: 500px;
         }
-        h1 { color: #333; margin-bottom: 1rem; font-size: 1.5rem; }
-        .icon { font-size: 4rem; margin-bottom: 1rem; }
-        p { color: #666; line-height: 1.6; margin: 1rem 0; }
-        .clients {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 0.5rem;
-            margin-top: 1.5rem;
-            text-align: left;
+        
+        .icon {
+            font-size: 5rem;
+            margin-bottom: 2rem;
+            display: inline-block;
         }
-        .client {
-            background: #f5f5f5;
-            padding: 0.5rem;
-            border-radius: 0.5rem;
-            font-size: 0.9rem;
-            color: #333;
+        
+        h1 {
+            font-size: 3.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 1rem;
+            line-height: 1.1;
         }
-        .warning {
+        
+        .subtitle {
+            font-size: 1.3rem;
+            color: #555;
+            margin-bottom: 3rem;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+        }
+        
+        .content-section {
+            background: white;
+            border-radius: 18px;
+            padding: 3rem 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .content-section p {
+            font-size: 1.1rem;
+            color: #666;
+            margin-bottom: 1.5rem;
+            line-height: 1.8;
+        }
+        
+        .guide-link {
+            display: inline-block;
+            padding: 12px 24px;
+            background: #0071e3;
+            color: white;
+            text-decoration: none;
+            border-radius: 980px;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: background 0.3s ease;
+            margin-bottom: 2rem;
+        }
+        
+        .guide-link:hover {
+            background: #0077ed;
+        }
+        
+        .guide-link:active {
+            background: #0066cc;
+        }
+        
+        .security-notice {
             background: #fff3cd;
-            color: #856404;
-            padding: 1rem;
-            border-radius: 0.5rem;
-            margin-top: 1.5rem;
             border-left: 4px solid #ffc107;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+            text-align: left;
+            display: inline-block;
+            max-width: 100%;
+        }
+        
+        .security-notice strong {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+        
+        .security-notice p {
+            color: #856404;
+            font-size: 0.95rem;
+            margin: 0;
+        }
+        
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+            
+            .subtitle {
+                font-size: 1.1rem;
+            }
+            
+            .content-section {
+                padding: 2rem 1.5rem;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="icon">🔐</div>
-        <h1>此链接仅供代理客户端使用</h1>
-        <p>检测到您正在使用浏览器访问订阅链接。</p>
-        <p><strong>此链接不支持浏览器访问</strong>，请使用以下代理客户端导入：</p>
-        <div class="clients">
-            <div class="client">📱 Shadowrocket</div>
-            <div class="client">⚡ Clash</div>
-            <div class="client">🎯 Quantumult X</div>
-            <div class="client">🌊 Surge</div>
-            <div class="client">🦊 Loon</div>
-            <div class="client">🎪 Stash</div>
-            <div class="client">📡 V2rayN</div>
-            <div class="client">📲 V2rayNG</div>
-        </div>
-        <div class="warning">
-            <strong>⚠️ 安全提示</strong><br>
-            请勿在公共场合或不安全的环境下打开此链接
+        <h1>此链接仅供对应客户端使用</h1>
+        <p class="subtitle">请在支持应用中打开此链接</p>
+        
+        <div class="content-section">
+            <a href="https://mpin.tsmoe.com/r/mdviewer?file=fanqie-tutorial" class="guide-link" target="_blank">
+                📖 查看参考指南
+            </a>
+            
+            <div class="security-notice">
+                <strong>⚠️ 安全提示</strong>
+                <p>请勿在不安全的环境下打开此链接，避免在社交软件中分享。</p>
+            </div>
         </div>
     </div>
 </body>
