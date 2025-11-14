@@ -338,7 +338,7 @@ const handleDeselectAll = (listName, sourceArray) => {
                     <option value="">使用全局默认</option>
                     <option value="basic">测试策略 (共享模式)</option>
                     <option value="family">家庭套餐 (4台设备, 适中限制)</option>
-                    <option value="pro">专业套餐 (6台设备, 宽松限制)</option>
+                    <option value="pro">精英独家专享策略</option>
                     <option value="strict">严格模式 (1台设备, 极严限制)</option>
                   </select>
                   <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">

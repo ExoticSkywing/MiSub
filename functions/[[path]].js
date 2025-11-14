@@ -3982,7 +3982,13 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         // ⚠️ 注意：KV 保存已移到订阅内容成功生成之后，避免订阅转换器失败时设备配额被占用
         
         // 8. 发送Telegram通知
-        if (config.BotToken && config.ChatID) {
+        // 【通知检查】检查是否应该发送激活/访问通知
+        const telegramConfig = asyncConfig.telegram;
+        const shouldDisableNotifications = !telegramConfig.GLOBAL_NOTIFY_ENABLED;
+        const isTestMode = profile && profile.policyKey === 'basic' && telegramConfig.DISABLE_NOTIFY_IN_TEST_MODE;
+        const shouldSendAccessNotifications = !shouldDisableNotifications && !isTestMode;
+        
+        if (config.BotToken && config.ChatID && shouldSendAccessNotifications) {
             const domain = new URL(request.url).hostname;
             const lastAccessTime = new Date(userData.stats.lastRequest).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
             const expiresTime = userData.expiresAt ? new Date(userData.expiresAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }) : 'N/A';
@@ -4294,17 +4300,27 @@ async function handleMisubRequest(context) {
         
         let additionalData = `*域名:* \`${domain}\`\n*客户端:* \`${userAgentHeader}\`\n*请求格式:* \`${targetFormat}\``;
         
+        let profileForNotification = null;
         if (profileIdentifier) {
             additionalData += `\n*订阅组:* \`${subName}\``;
-            const profile = allProfiles.find(p => (p.customId && p.customId === profileIdentifier) || p.id === profileIdentifier);
-            if (profile && profile.expiresAt) {
-                const expiryDateStr = new Date(profile.expiresAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+            profileForNotification = allProfiles.find(p => (p.customId && p.customId === profileIdentifier) || p.id === profileIdentifier);
+            if (profileForNotification && profileForNotification.expiresAt) {
+                const expiryDateStr = new Date(profileForNotification.expiresAt).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
                 additionalData += `\n*到期时间:* \`${expiryDateStr}\``;
             }
         }
         
+        // 【通知检查】检查是否应该发送访问通知
+        const asyncConfig = getConfig();
+        const telegramConfig = asyncConfig.telegram;
+        const shouldDisableNotifications = !telegramConfig.GLOBAL_NOTIFY_ENABLED;
+        const isTestMode = profileForNotification && profileForNotification.policyKey === 'basic' && telegramConfig.DISABLE_NOTIFY_IN_TEST_MODE;
+        const shouldSendAccessNotifications = !shouldDisableNotifications && !isTestMode;
+        
         // 使用增强版TG通知，包含IP地理位置信息
-        context.waitUntil(sendEnhancedTgNotification(config, '🛰️ *订阅被访问*', request, additionalData));
+        if (shouldSendAccessNotifications) {
+            context.waitUntil(sendEnhancedTgNotification(config, '🛰️ *订阅被访问*', request, additionalData));
+        }
     }
 
     let prependedContentForSubconverter = '';
