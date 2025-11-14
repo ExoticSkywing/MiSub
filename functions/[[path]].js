@@ -2537,10 +2537,10 @@ function getCityFromCF(request) {
  */
 function generateDeviceLimitError(deviceCount, maxDevices) {
     const errorNodes = [
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⛔ 设备数超限')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`当前: ${deviceCount}台 / 限制: ${maxDevices}台`)}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ 请勿多设备共享订阅')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('如需更多设备，请联系服务商')}`
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⛔ device limit exceeded')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`current: ${deviceCount} devices / limit: ${maxDevices} devices`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ do not share subscription with multiple devices')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('contact service provider for more devices')}`
     ];
     return errorNodes.join('\n');
 }
@@ -2557,9 +2557,9 @@ function generateErrorConfig(format, errorMessage) {
     
     switch (format.toLowerCase()) {
         case 'clash':
-            configContent = `# ⚠️ 订阅访问受限
+            configContent = `# ⚠️ subscription access limited
 # ${errorMessage}
-# 请联系管理员或等待限制解除
+# please contact administrator or wait for limit to be removed
 
 port: 7890
 socks-port: 7891
@@ -2576,13 +2576,13 @@ proxies:
     password: error
 
 proxy-groups:
-  - name: "🚫 访问受限"
+  - name: "🚫 access limited"
     type: select
     proxies:
       - "⚠️ ${errorMessage}"
 
 rules:
-  - MATCH,🚫 访问受限
+  - MATCH,🚫 access limited
 `;
             contentType = 'text/yaml; charset=utf-8';
             break;
@@ -2599,16 +2599,16 @@ dns-server = system
 ⚠️ ${errorMessage} = ss, 127.0.0.1, 1, encrypt-method=aes-128-gcm, password=error
 
 [Proxy Group]
-🚫 访问受限 = select, ⚠️ ${errorMessage}
+🚫 access limited = select, ⚠️ ${errorMessage}
 
 [Rule]
-FINAL,🚫 访问受限
+FINAL,🚫 access limited
 `;
             contentType = 'text/plain; charset=utf-8';
             break;
             
         case 'loon':
-            configContent = `# ⚠️ 订阅访问受限
+            configContent = `# ⚠️ subscription access limited
 # ${errorMessage}
 
 [General]
@@ -2619,16 +2619,16 @@ dns-server = system
 ⚠️ ${errorMessage} = Shadowsocks,127.0.0.1,1,aes-128-gcm,"error"
 
 [Proxy Group]
-🚫 访问受限 = select,⚠️ ${errorMessage}
+🚫 access limited = select,⚠️ ${errorMessage}
 
 [Rule]
-FINAL,🚫 访问受限
+FINAL,🚫 access limited
 `;
             contentType = 'text/plain; charset=utf-8';
             break;
             
         default:
-            // 默认返回简单的错误信息
+            // default simple error message
             configContent = `⚠️ ${errorMessage}`;
             contentType = 'text/plain; charset=utf-8';
     }
@@ -2638,7 +2638,7 @@ FINAL,🚫 访问受限
         headers: {
             'Content-Type': contentType,
             'Cache-Control': 'no-store, no-cache',
-            'Profile-Title': '⚠️ 访问受限',
+            'Profile-Title': '⚠️ access limited',
             'Subscription-UserInfo': 'upload=0; download=0; total=0; expire=0'
         }
     });
@@ -2650,10 +2650,10 @@ FINAL,🚫 访问受限
  */
 function generateNewDeviceNewCityError() {
     const errorNodes = [
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🚫 新设备+新城市')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('检测到可疑的共享行为')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ 请使用常用节点或关闭代理')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('如需添加新设备，请先使用已有城市')}`
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🚫 new device + new city')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('detected suspicious sharing behavior')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ please use common nodes or disable proxy')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('to add new device, please use existing cities first')}`
     ];
     return errorNodes.join('\n');
 }
@@ -2666,10 +2666,10 @@ function generateNewDeviceNewCityError() {
  */
 function generateCityLimitError(currentCityCount, maxCities) {
     const errorNodes = [
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🌍 城市上限')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`当前: ${currentCityCount}个 / 限制: ${maxCities}个`)}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ 账户已达城市上限')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('请使用已有城市或联系服务商')}`
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🌍 city limit')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`current: ${currentCityCount} cities / limit: ${maxCities} cities`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ account has reached city limit')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('please use existing cities or contact service provider')}`
     ];
     return errorNodes.join('\n');
 }
@@ -2686,11 +2686,11 @@ function generateCityLimitError(currentCityCount, maxCities) {
 function generateExistingDeviceNewCityError(deviceId, existingCities, newCity, cityCount, maxCities) {
     const cityList = existingCities.join(', ');
     const errorNodes = [
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🌍 该城市非常用城市')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`账户已有城市 (${cityCount}/${maxCities}): ${cityList}`)}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`当前城市: ${newCity}`)}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ 请使用常用节点或关闭代理后重试')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('如持续出现此提示，请联系服务商')}`
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🌍 this city is not a common city')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`account cities (${cityCount}/${maxCities}): ${cityList}`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`current city: ${newCity}`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('❌ please use common nodes or disable proxy and retry')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('if this persists, please contact service provider')}`
     ];
     return errorNodes.join('\n');
 }
@@ -2704,11 +2704,11 @@ function generateExistingDeviceNewCityError(deviceId, existingCities, newCity, c
  */
 function generateRateLimitError(dailyCount, rateLimit, deviceCount) {
     const errorNodes = [
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⏰ 今日访问次数超限')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`已访问: ${dailyCount}次 / 限制: ${rateLimit}次`)}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`当前设备数: ${deviceCount}台`)}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⏳ 明天0点(UTC+8)重置访问次数')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('或减少设备数量以获得更多访问次数')}`
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⏰ today access limit')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`access count: ${dailyCount} times / limit: ${rateLimit} times`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`current device count: ${deviceCount} devices`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⏳ reset access limit at 00:00 tomorrow(UTC+8)')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('or reduce device count to get more access limit')}`
     ];
     return errorNodes.join('\n');
 }
@@ -2720,15 +2720,15 @@ function generateRateLimitError(dailyCount, rateLimit, deviceCount) {
  * @returns {string} - Base64编码的错误节点
  */
 function generateSuspendError(suspendUntil, suspendReason) {
-    const unfreezeDate = new Date(suspendUntil).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+    const unfreezeDate = new Date(suspendUntil).toLocaleString('en-US', { timeZone: 'Asia/Shanghai' });
     const remainingDays = Math.ceil((suspendUntil - Date.now()) / (1000 * 60 * 60 * 24));
     const errorNodes = [
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🚫 账号已临时封禁')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`原因: ${suspendReason}`)}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`剩余封禁时间: ${remainingDays}天`)}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`解封时间: ${unfreezeDate}`)}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⏳ 到期后自动解冻')}`,
-        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('如着急请联系服务商')}`
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('🚫 account temporarily suspended')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`reason: ${suspendReason}`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`remaining suspension: ${remainingDays} days`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent(`unsuspend time: ${unfreezeDate}`)}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('⏳ auto unsuspend after expiration')}`,
+        `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('if urgent, please contact service provider')}`
     ];
     return errorNodes.join('\n');
 }
@@ -3925,27 +3925,27 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             
             switch (antiShareResult.reason) {
                 case 'suspended':
-                    errorMessage = `账号已临时封禁 - ${antiShareResult.suspendReason}`;
+                    errorMessage = `account suspended - ${antiShareResult.suspendReason}`;
                     break;
                     
                 case 'device_limit':
-                    errorMessage = `设备数量超限 - 已达${antiShareResult.deviceCount}/${antiShareResult.maxDevices}台设备`;
+                    errorMessage = `reach device limit`;
                     break;
                     
                 case 'new_device_new_city':
-                    errorMessage = `新设备新城市 - 可疑共享行为`;
+                    errorMessage = `new device new city - suspected sharing behavior`;
                     break;
                     
                 case 'city_limit_exceeded':
-                    errorMessage = `城市上限 - 账户已达${antiShareResult.currentCityCount}/${antiShareResult.maxCities}个城市`;
+                    errorMessage = `city limit exceeded - account reached ${antiShareResult.currentCityCount}/${antiShareResult.maxCities} cities`;
                     break;
                     
                 case 'existing_device_new_city':
-                    errorMessage = `城市异常 - 该城市非常用城市`;
+                    errorMessage = `city exception - this city is not a common city`;
                     break;
                     
                 case 'rate_limit':
-                    errorMessage = `访问次数超限 - 今日已访问${antiShareResult.dailyCount}/${antiShareResult.rateLimit}次`;
+                    errorMessage = `rate limit - today has visited ${antiShareResult.dailyCount}/${antiShareResult.rateLimit} times`;
                     break;
             }
             
