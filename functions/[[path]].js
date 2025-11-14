@@ -3736,7 +3736,7 @@ function getBrowserBlockedResponse() {
             
             <div class="security-notice">
                 <strong>⚠️ 安全提示</strong>
-                <p>请勿在不安全的环境下打开此链接，避免在社交软件中分享。</p>
+                <p>请勿在不安全的环境下打开此链接，避免在社交软件中分享泄露你的订阅。</p>
             </div>
         </div>
     </div>
