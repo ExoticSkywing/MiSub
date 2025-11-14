@@ -253,6 +253,35 @@ const formatBytes = (bytes, decimals = 2) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 };
 
+// 将流量字符串转换为字节数（例如 "10GB" -> 10737418240）
+const parseBandwidthToBytes = (bandwidthStr) => {
+  if (!bandwidthStr || typeof bandwidthStr !== 'string') {
+    return 10737418240; // 默认 10GB
+  }
+  
+  const str = bandwidthStr.trim().toUpperCase();
+  const match = str.match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)?$/);
+  
+  if (!match) {
+    return 10737418240; // 默认 10GB
+  }
+  
+  const value = parseFloat(match[1]);
+  const unit = match[2] || 'B';
+  const k = 1024;
+  
+  const unitMap = {
+    'B': 1,
+    'KB': k,
+    'MB': k * k,
+    'GB': k * k * k,
+    'TB': k * k * k * k,
+    'PB': k * k * k * k * k
+  };
+  
+  return Math.floor(value * (unitMap[unit] || 1));
+};
+
 // --- TG 通知函式 (无修改) ---
 async function sendTgNotification(settings, message) {
   if (!settings.BotToken || !settings.ChatID) {
@@ -4074,11 +4103,14 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
                 expiresAtTimestamp = new Date(userData.expiresAt).getTime();
             }
             
+            // 【新增】获取总流量（从 profile.totalBandwidth 或使用默认值）
+            const totalBandwidthBytes = parseBandwidthToBytes(profile.totalBandwidth);
+            
             return new Response(base64Content, {
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                     'Cache-Control': 'no-store, no-cache',
-                    'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(expiresAtTimestamp / 1000)}`,
+                    'Subscription-UserInfo': `upload=0; download=0; total=${totalBandwidthBytes}; expire=${Math.floor(expiresAtTimestamp / 1000)}`,
                     'Profile-Update-Interval': '24',
                     'Profile-Title': profile.name || config.FileName
                 }
@@ -4098,8 +4130,11 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             expiresAtTimestamp = new Date(userData.expiresAt).getTime();
         }
         
+        // 【新增】获取总流量（从 profile.totalBandwidth 或使用默认值）
+        const totalBandwidthBytes = parseBandwidthToBytes(profile.totalBandwidth);
+        
         const additionalHeaders = {
-            'Subscription-UserInfo': `upload=0; download=0; total=10737418240; expire=${Math.floor(expiresAtTimestamp / 1000)}`,
+            'Subscription-UserInfo': `upload=0; download=0; total=${totalBandwidthBytes}; expire=${Math.floor(expiresAtTimestamp / 1000)}`,
             'Profile-Update-Interval': '24',
             'Profile-Title': profile.name || config.FileName
         };

@@ -272,6 +272,19 @@ const handleDeselectAll = (listName, sourceArray) => {
               >
               <p class="text-xs text-gray-400 mt-1">设置此订阅组的到期时间，到期后将返回默认节点。</p>
             </div>
+            <div>
+              <label for="profile-total-bandwidth" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                总流量 (可选)
+              </label>
+              <input
+                type="text"
+                id="profile-total-bandwidth"
+                v-model="localProfile.totalBandwidth"
+                placeholder="例如：10GB, 100GB, 1TB"
+                class="mt-1 block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:text-white"
+              >
+              <p class="text-xs text-gray-400 mt-1">设置此订阅组的总流量，仅用于客户端展示，不影响实际流量限制。</p>
+            </div>
             
             <!-- 前缀设置部分 -->
             <div>
