@@ -2672,9 +2672,10 @@ function generateSuspendError(suspendUntil, suspendReason) {
  * @param {Object} config - 反共享配置对象（从 getConfig() 获取）
  * @param {Object} settings - Telegram等设置（包含 BotToken、ChatID 等）
  * @param {Object} context - 上下文对象
+ * @param {Object} profile - 订阅组对象（可选，用于检查是否在测试模式）
  * @returns {Promise<Object>} - 检测结果 { allowed: boolean, reason?: string, ... }
  */
-async function performAntiShareCheck(userToken, userData, request, env, config, settings, context) {
+async function performAntiShareCheck(userToken, userData, request, env, config, settings, context, profile = null) {
     const userAgent = request.headers.get('User-Agent') || 'Unknown';
     // 使用多层降级获取 IP（与 sendEnhancedTgNotification 保持一致）
     const clientIp = request.headers.get('CF-Connecting-IP') 
@@ -2682,6 +2683,30 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
         || request.headers.get('X-Real-IP')
         || 'Unknown';
     const storageAdapter = await getStorageAdapter(env);
+    
+    // 【通知检查】判断是否应该发送 Telegram 通知
+    // 1. 检查全局开关
+    const asyncConfig = getConfig();
+    const telegramConfig = asyncConfig.telegram;
+    const shouldDisableNotifications = !telegramConfig.GLOBAL_NOTIFY_ENABLED;
+    
+    // 2. 检查是否在测试模式（basic 预设 = 共享模式）
+    const isTestMode = profile && profile.policyKey === 'basic' && telegramConfig.DISABLE_NOTIFY_IN_TEST_MODE;
+    
+    // 3. 决定是否发送通知
+    const shouldSendNotifications = !shouldDisableNotifications && !isTestMode;
+    
+    if (isTestMode) {
+        console.log(`[AntiShare] Test mode detected (basic preset), notifications disabled for user ${userToken}`);
+    }
+    
+    // 【通知包装函数】自动检查是否应该发送通知
+    const sendNotificationIfEnabled = async (type, additionalData, city) => {
+        if (shouldSendNotifications) {
+            return await sendEnhancedTgNotification(settings, type, request, additionalData, city);
+        }
+        return false;
+    };
     
     // 1. 获取设备ID（hash User-Agent）
     const deviceId = getDeviceId(userAgent);
@@ -2829,7 +2854,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - 达到上限后尝试: \`${oldRateLimitAttempts}\` → \`${userData.stats.rateLimitAttempts}\` 次（阈值: ${rateLimitThreshold}次）
 
 ⚠️ 如继续违规，将更快触发再次封禁。`;
-                context.waitUntil(sendEnhancedTgNotification(settings, '✅ *账号已自动解封*', request, additionalData, city));
+                context.waitUntil(sendNotificationIfEnabled('✅ *账号已自动解封*', additionalData, city));
             }
             
             delete userData.suspend;
@@ -2904,7 +2929,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - 已有设备数: \`${deviceCount}\`
 - ⚠️ 疑似账号共享或滥用（频繁尝试添加超限设备）`;
                 
-                context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData, city));
+                context.waitUntil(sendNotificationIfEnabled('🚫 *账号已临时封禁*', additionalData, city));
                 console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                 
                 // 保存封禁状态
@@ -2930,7 +2955,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *城市:* \`${city}\`
 *IP:* \`${clientIp}\`
 *失败尝试:* \`${userData.stats.failedAttempts}\` 次（阈值: ${config.antiShare.SUSPEND_FAILED_ATTEMPTS_THRESHOLD}次）`;
-            context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *设备数超限*', request, additionalData, city));
+            context.waitUntil(sendNotificationIfEnabled('🚫 *设备数超限*', additionalData, city));
         }
         
         // 保存failedAttempts
@@ -2980,7 +3005,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *设备数:* \`${deviceCount}\`
 *IP:* \`${clientIp}\`
 *原因:* 账户已达城市上限（${maxCities}个城市），无法添加新城市`;
-            context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *城市上限*', request, additionalData, city));
+            context.waitUntil(sendNotificationIfEnabled('🌍 *城市上限*', additionalData, city));
         }
         
         // 记录失败尝试次数
@@ -3032,7 +3057,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - 已有设备数: \`${deviceCount}\`
 - ⚠️ 尝试超过城市上限`;
                 
-                context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData, city));
+                context.waitUntil(sendNotificationIfEnabled('🚫 *账号已临时封禁*', additionalData, city));
                 console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                 
                 // 保存封禁状态
@@ -3078,7 +3103,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *尝试添加:* 第${deviceCount + 1}台设备
 *IP:* \`${clientIp}\`
 *原因:* 新设备访问新城市，请用常用节点或关闭代理后尝试更新`;
-                    context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *新设备新城市*', request, additionalData, city));
+                    context.waitUntil(sendNotificationIfEnabled('🚫 *新设备新城市*', additionalData, city));
                 }
                 
                 // 记录失败尝试次数
@@ -3130,7 +3155,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - 已有设备数: \`${deviceCount}\`
 - ⚠️ 新设备访问新城市（可疑共享）`;
                         
-                        context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData, city));
+                        context.waitUntil(sendNotificationIfEnabled('🚫 *账号已临时封禁*', additionalData, city));
                         console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                         
                         // 保存封禁状态
@@ -3171,7 +3196,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *设备数:* \`${deviceCount}\`
 *IP:* \`${clientIp}\`
 *原因:* 该城市非常用城市（账户已达${maxCities}个城市上限）`;
-                        context.waitUntil(sendEnhancedTgNotification(settings, '🌍 *城市异常*', request, additionalData, city));
+                        context.waitUntil(sendNotificationIfEnabled('🌍 *城市异常*', additionalData, city));
                     }
                     
                     // 记录失败尝试次数
@@ -3223,7 +3248,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - 已有设备数: \`${deviceCount}\`
 - ⚠️ 已有设备访问新城市，超过城市上限`;
                             
-                            context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData, city));
+                            context.waitUntil(sendNotificationIfEnabled('🚫 *账号已临时封禁*', additionalData, city));
                             console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate} (failedAttempts: ${userData.stats.failedAttempts})`);
                             
                             // 保存封禁状态
@@ -3277,7 +3302,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *当前设备数:* \`${newDeviceCount}\`/${config.antiShare.MAX_DEVICES}
 *IP:* \`${clientIp}\`
 *绑定时间:* \`${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}\``;
-            context.waitUntil(sendEnhancedTgNotification(settings, '✅ *新设备绑定成功*', request, additionalData, city));
+            context.waitUntil(sendNotificationIfEnabled('✅ *新设备绑定成功*', additionalData, city));
         }
     }
     
@@ -3385,7 +3410,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 - ⚠️ 可疑的高频访问行为`;
             }
             
-            context.waitUntil(sendEnhancedTgNotification(settings, '🚫 *账号已临时封禁*', request, additionalData, city));
+            context.waitUntil(sendNotificationIfEnabled('🚫 *账号已临时封禁*', additionalData, city));
             
             console.log(`[AntiShare] Account ${userToken} suspended until ${unfreezeDate}`);
             
@@ -3417,7 +3442,7 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
 *城市:* \`${city}\`
 *IP:* \`${clientIp}\`
 *重置时间:* 明天0点(UTC+8)`;
-            context.waitUntil(sendEnhancedTgNotification(settings, '⏰ *访问次数超限*', request, additionalData, city));
+            context.waitUntil(sendNotificationIfEnabled('⏰ *访问次数超限*', additionalData, city));
         }
         
         // 保存rateLimitAttempts
@@ -3818,7 +3843,8 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             env,
             { ...asyncConfig, antiShare: effectiveAntiShareConfig },  // 使用合并后的配置
             config,  // settings参数：包含 BotToken、ChatID 等
-            context
+            context,
+            profile  // 传入 profile 对象，用于检查是否在测试模式
         );
         
         if (!antiShareResult.allowed) {

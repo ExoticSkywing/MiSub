@@ -336,7 +336,7 @@ const handleDeselectAll = (listName, sourceArray) => {
                     class="block w-full text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 focus:outline-hidden focus:ring-indigo-500 focus:border-indigo-500 dark:text-white"
                   >
                     <option value="">使用全局默认</option>
-                    <option value="basic">基础套餐 (2台设备, 严格限制)</option>
+                    <option value="basic">测试策略 (共享模式)</option>
                     <option value="family">家庭套餐 (4台设备, 适中限制)</option>
                     <option value="pro">专业套餐 (6台设备, 宽松限制)</option>
                     <option value="strict">严格模式 (1台设备, 极严限制)</option>

@@ -37,21 +37,21 @@ export const ANTI_SHARE_CONFIG = {
 // 预设策略库（不同套餐的反共享模板）
 // ============================================
 export const ANTI_SHARE_PRESETS = {
-  // 基础套餐：严格限制
+  // 测试策略：共享模式
   basic: {
-    MAX_DEVICES: 2,
-    MAX_CITIES: 2,
-    CITY_CHECK_START_INDEX: 1,
-    RATE_LIMIT_ENABLED: true,
+    MAX_DEVICES: 9999999,
+    MAX_CITIES: 9999999,
+    CITY_CHECK_START_INDEX: 999999,
+    RATE_LIMIT_ENABLED: false,
     RATE_LIMITS: {
       1: 30,
       2: 50
     },
-    SUSPEND_ENABLED: true,
+    SUSPEND_ENABLED: false,
     SUSPEND_REQUIRE_MAX_DEVICES: false,
     SUSPEND_DURATION_DAYS: 3,
-    SUSPEND_RATE_LIMIT_ATTEMPTS_THRESHOLD: 5,
-    SUSPEND_FAILED_ATTEMPTS_THRESHOLD: 3
+    SUSPEND_RATE_LIMIT_ATTEMPTS_THRESHOLD: 9999999,
+    SUSPEND_FAILED_ATTEMPTS_THRESHOLD: 9999999
   },
   
   // 家庭套餐：适中限制
@@ -148,6 +148,11 @@ export const GEOIP_CONFIG = {
 // Telegram 通知配置
 // ============================================
 export const TELEGRAM_CONFIG = {
+  // 全局通知开关
+  GLOBAL_NOTIFY_ENABLED: true,       // 全局开关：是否启用所有 Telegram 通知（测试时可关闭）
+  DISABLE_NOTIFY_IN_TEST_MODE: true, // 在测试模式（basic 预设）下禁用通知
+  
+  // 细粒度通知开关
   NOTIFY_ON_ACTIVATION: true,        // 是否发送激活通知
   NOTIFY_ON_NEW_DEVICE: true,        // 是否发送新设备绑定成功通知
   NOTIFY_ON_DEVICE_LIMIT: true,      // 是否发送设备数超限通知
