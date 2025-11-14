@@ -140,6 +140,10 @@ watch(() => props.profile, (newProfile) => {
         manualNodePrefix: ''
       };
     }
+    // 初始化总流量字段（如果不存在）
+    if (!profileCopy.totalBandwidth) {
+      profileCopy.totalBandwidth = '';
+    }
     localProfile.value = profileCopy;
   } else {
     localProfile.value = { 
@@ -149,6 +153,7 @@ watch(() => props.profile, (newProfile) => {
       manualNodes: [], 
       customId: '', 
       expiresAt: '',
+      totalBandwidth: '',
       prefixSettings: {
         enableManualNodes: null,
         enableSubscriptions: null,

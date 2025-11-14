@@ -4105,6 +4105,7 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
             
             // 【新增】获取总流量（从 profile.totalBandwidth 或使用默认值）
             const totalBandwidthBytes = parseBandwidthToBytes(profile.totalBandwidth);
+            console.log(`[Base64] Profile totalBandwidth: "${profile.totalBandwidth}", Parsed bytes: ${totalBandwidthBytes}`);
             
             return new Response(base64Content, {
                 headers: {
@@ -4132,6 +4133,7 @@ async function handleUserSubscription(userToken, profileId, profileToken, reques
         
         // 【新增】获取总流量（从 profile.totalBandwidth 或使用默认值）
         const totalBandwidthBytes = parseBandwidthToBytes(profile.totalBandwidth);
+        console.log(`[Subconverter] Profile totalBandwidth: "${profile.totalBandwidth}", Parsed bytes: ${totalBandwidthBytes}`);
         
         const additionalHeaders = {
             'Subscription-UserInfo': `upload=0; download=0; total=${totalBandwidthBytes}; expire=${Math.floor(expiresAtTimestamp / 1000)}`,
