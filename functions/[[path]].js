@@ -3381,10 +3381,12 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
     const isNewCity = !device.cities[cityKey];
     const currentDeviceCount = Object.keys(userData.devices).length;
     
-    // 【检测3】访问次数限制
-    const today = new Date().toISOString().split('T')[0];
+    // 【检测3】访问次数限制（按 Asia/Shanghai 本地日期统计）
+    const now = new Date();
+    const shanghaiNow = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    const today = shanghaiNow.toISOString().split('T')[0];
     
-    // 初始化或重置每日计数
+    // 初始化或重置每日计数（每天本地 0 点重置）
     if (!userData.stats.dailyDate || userData.stats.dailyDate !== today) {
         userData.stats.dailyCount = 0;
         userData.stats.dailyDate = today;
