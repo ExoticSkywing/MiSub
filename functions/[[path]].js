@@ -3476,11 +3476,11 @@ async function performAntiShareCheck(userToken, userData, request, env, config, 
             // 根据触发原因生成不同的封禁理由
             let suspendReason = '';
             if (suspendByRateLimitAttempts) {
-                suspendReason = `检测到账号共享行为（达到上限后仍有${rateLimitAttempts}次尝试访问，疑似多人共享）`;
+                suspendReason = `Detected account sharing (there were still ${rateLimitAttempts} access attempts after reaching the limit, suspected multi-user sharing).`;
             } else if (suspendByFailedAttempts) {
-                suspendReason = `可疑的高频失败尝试（${failedAttempts}次失败尝试，疑似账号共享或滥用）`;
+                suspendReason = `Suspicious high-frequency failed attempts (${failedAttempts} failed attempts, suspected account sharing or abuse).`;
             } else {
-                suspendReason = `可疑的高频访问行为`;
+                suspendReason = `Suspicious high-frequency access behavior.`;
             }
             
             userData.suspend = {

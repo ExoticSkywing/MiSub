@@ -80,10 +80,10 @@ export const ANTI_SHARE_PRESETS = {
     CITY_CHECK_START_INDEX: 2,
     RATE_LIMIT_ENABLED: true,
     RATE_LIMITS: {
-      1: 3,
-      2: 5,
-      3: 7,
-      4: 9
+      1: 5,
+      2: 10,
+      3: 15,
+      4: 20
     },
     SUSPEND_ENABLED: true,
     SUSPEND_REQUIRE_MAX_DEVICES: false,
