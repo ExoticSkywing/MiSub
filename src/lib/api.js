@@ -342,6 +342,31 @@ export async function deleteUser(token) {
 }
 
 /**
+ * 删除（解绑）单个设备
+ * @param {string} token - 用户 Token
+ * @param {string} deviceId - 设备 ID
+ * @returns {Promise<Object>} - 操作结果
+ */
+export async function deleteUserDevice(token, deviceId) {
+    try {
+        const response = await fetch(`/api/users/${token}/devices/${deviceId}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.error || errorData.message || `服务器错误 (${response.status})`;
+            return { success: false, message: errorMessage };
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error("Failed to delete user device:", error);
+        return { success: false, message: '网络请求失败，请检查网络连接' };
+    }
+}
+
+/**
  * 批量删除用户
  * @param {Array<string>} tokens - 用户 Token 数组
  * @returns {Promise<Object>} - 操作结果

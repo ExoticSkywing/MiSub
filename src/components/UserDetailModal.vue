@@ -200,6 +200,7 @@
                       <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">设备名称</th>
                       <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">激活时间</th>
                       <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">最后使用</th>
+                      <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">操作</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
@@ -208,6 +209,14 @@
                       <td class="px-4 py-2 text-gray-900 dark:text-white">{{ device.name }}</td>
                       <td class="px-4 py-2 text-gray-600 dark:text-gray-400">{{ formatDate(device.activatedAt) }}</td>
                       <td class="px-4 py-2 text-gray-600 dark:text-gray-400">{{ formatDate(device.lastSeen) }}</td>
+                      <td class="px-4 py-2 text-right">
+                        <button
+                          class="inline-flex items-center px-2 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 rounded whitespace-nowrap"
+                          @click="handleDeleteDevice(device.id)"
+                        >
+                          解绑设备
+                        </button>
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -280,7 +289,7 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
-import { fetchUserDetail, updateUser, unsuspendUser as apiUnsuspendUser } from '../lib/api.js';
+import { fetchUserDetail, updateUser, unsuspendUser as apiUnsuspendUser, deleteUserDevice } from '../lib/api.js';
 import { useToastStore } from '../stores/toast.js';
 
 const props = defineProps({
@@ -334,6 +343,29 @@ async function loadUserDetail() {
     showToast('❌ 加载用户详情失败：' + error.message, 'error');
   } finally {
     loading.value = false;
+  }
+}
+
+// 解绑设备
+async function handleDeleteDevice(deviceId) {
+  if (!deviceId) return;
+  if (!confirm(`确定要解绑设备 ${deviceId} 吗？`)) return;
+
+  saving.value = true;
+  try {
+    const result = await deleteUserDevice(props.token, deviceId);
+    if (result.success) {
+      showToast('✅ 设备已解绑', 'success');
+      await loadUserDetail();
+      emit('updated');
+    } else {
+      showToast('❌ ' + (result.message || '解绑设备失败'), 'error');
+    }
+  } catch (error) {
+    console.error('Delete device error:', error);
+    showToast('❌ 解绑设备失败：' + error.message, 'error');
+  } finally {
+    saving.value = false;
   }
 }
 

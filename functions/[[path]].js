@@ -1306,6 +1306,55 @@ async function handleApiRequest(request, env) {
         }
     }
     
+    // DELETE /api/users/:token/devices/:deviceId - 删除单个设备
+    if (path.match(/^\/users\/[^\/]+\/devices\/[^\/]+$/) && request.method === 'DELETE') {
+        try {
+            const parts = path.split('/');
+            const token = parts[2];
+            const deviceId = parts[4];
+            if (!token || !deviceId) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: 'Token and deviceId are required'
+                }), { status: 400 });
+            }
+            
+            const storageAdapter = await getStorageAdapter(env);
+            const userDataRaw = await storageAdapter.get(`user:${token}`);
+            
+            if (!userDataRaw) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '用户不存在'
+                }), { status: 404 });
+            }
+            
+            const userData = typeof userDataRaw === 'string' ? JSON.parse(userDataRaw) : userDataRaw;
+            if (!userData.devices || !userData.devices[deviceId]) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '设备不存在'
+                }), { status: 404 });
+            }
+            
+            delete userData.devices[deviceId];
+            await storageAdapter.put(`user:${token}`, userData);
+            
+            return new Response(JSON.stringify({
+                success: true,
+                message: '设备已解绑'
+            }), {
+                headers: { 'Content-Type': 'application/json' }
+            });
+        } catch (error) {
+            console.error('[API Error /users/:token/devices/:deviceId DELETE]', error);
+            return new Response(JSON.stringify({
+                success: false,
+                error: error.message
+            }), { status: 500 });
+        }
+    }
+    
     // PATCH /api/users/:token - 修改用户信息
     if (path.match(/^\/users\/[^\/]+$/) && request.method === 'PATCH') {
         try {
